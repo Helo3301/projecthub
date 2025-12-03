@@ -1,0 +1,26 @@
+{
+  "name": "mobile-test",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "screenshot": "node screenshot.js",
+    "screenshot:local": "URL=http://localhost:3030 node screenshot.js",
+    "screenshot:network": "URL=http://10.0.0.73:3030 node screenshot.js",
+    "screenshot:help": "echo 'Usage: PASSWORD=yourpass npm run screenshot:local'",
+    "test": "npx playwright test",
+    "test:local": "URL=http://localhost:3030 npx playwright test",
+    "test:headed": "URL=http://localhost:3030 npx playwright test --headed",
+    "test:debug": "URL=http://localhost:3030 npx playwright test --debug",
+    "test:chrome": "URL=http://localhost:3030 npx playwright test --project='Desktop Chrome'",
+    "test:mobile": "URL=http://localhost:3030 npx playwright test --project='iPhone 14' --project='Pixel 7'",
+    "test:report": "npx playwright show-report test-results/html-report"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "playwright": "^1.57.0",
+    "@playwright/test": "^1.57.0"
+  }
+}
