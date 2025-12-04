@@ -15,14 +15,14 @@ async function anonymizeSidebar(page) {
       if (node.textContent.includes('timallen')) {
         node.textContent = node.textContent.replace(/timallen[^\s]*/g, 'demo@example.com');
       }
-      if (node.textContent.includes('@Helo')) {
-        node.textContent = node.textContent.replace(/@Helo/g, '@demouser');
+      if (node.textContent.includes('Helo')) {
+        node.textContent = node.textContent.replace(/@?Helo/g, '@demouser');
       }
       if (node.textContent.includes('Rowen')) {
         node.textContent = node.textContent.replace(/Rowen/g, 'Jane Smith');
       }
-      if (node.textContent.includes('@Redskittles')) {
-        node.textContent = node.textContent.replace(/@Redskittles/g, '@janesmith');
+      if (node.textContent.includes('Redskittles')) {
+        node.textContent = node.textContent.replace(/@?Redskittles/g, '@janesmith');
       }
     }
 
