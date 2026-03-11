@@ -191,9 +191,46 @@ describe('KanbanBoard', () => {
 
     render(<KanbanBoard tasks={tasksWithPositions} onTaskMove={mockOnTaskMove} />);
 
-    // Check that all task titles are rendered
-    expect(screen.getByText('First')).toBeInTheDocument();
-    expect(screen.getByText('Second')).toBeInTheDocument();
-    expect(screen.getByText('Third')).toBeInTheDocument();
+    // Verify DOM order within the todo column
+    const todoColumn = screen.getByTestId('droppable-todo');
+    const taskTitles = Array.from(todoColumn.querySelectorAll('h3')).map((el) => el.textContent);
+    expect(taskTitles).toEqual(['First', 'Second', 'Third']);
+  });
+
+  it('shows loading skeletons when isLoading is true', () => {
+    const { container } = render(<KanbanBoard tasks={[]} onTaskMove={mockOnTaskMove} isLoading />);
+    // Each of 5 columns renders 2 skeleton cards
+    const skeletons = container.querySelectorAll('.animate-pulse');
+    expect(skeletons.length).toBe(10);
+  });
+
+  it('shows ellipsis counts when loading', () => {
+    render(<KanbanBoard tasks={[]} onTaskMove={mockOnTaskMove} isLoading />);
+    const ellipses = screen.getAllByText('…');
+    expect(ellipses.length).toBe(5);
+  });
+
+  it('does not render add buttons when onAddTask is not provided', () => {
+    render(<KanbanBoard tasks={mockTasks} onTaskMove={mockOnTaskMove} />);
+    expect(screen.queryByRole('button', { name: /add task to/i })).not.toBeInTheDocument();
+  });
+
+  it('has accessible region and group roles', () => {
+    render(<KanbanBoard tasks={mockTasks} onTaskMove={mockOnTaskMove} />);
+    expect(screen.getByRole('region', { name: 'Kanban board' })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: /Backlog column, 1 task$/ })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: /To Do column, 1 task$/ })).toBeInTheDocument();
+  });
+
+  it('renders multiple tasks in the same column', () => {
+    const twoTodoTasks: Task[] = [
+      { ...mockTasks[1], id: 20, position: 0, title: 'First Todo' },
+      { ...mockTasks[1], id: 21, position: 1, title: 'Second Todo' },
+    ];
+    render(<KanbanBoard tasks={twoTodoTasks} onTaskMove={mockOnTaskMove} />);
+    expect(screen.getByText('2')).toBeInTheDocument(); // todo column count
+    const todoColumn = screen.getByTestId('droppable-todo');
+    const titles = Array.from(todoColumn.querySelectorAll('h3')).map((el) => el.textContent);
+    expect(titles).toEqual(['First Todo', 'Second Todo']);
   });
 });

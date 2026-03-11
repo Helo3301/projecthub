@@ -180,6 +180,50 @@ describe('CalendarView', () => {
     expect(screen.getByTestId('calendar-view')).toBeInTheDocument();
   });
 
+  it('calendar has accessible region with day labels', () => {
+    render(<CalendarView events={[]} />);
+    const region = screen.getByRole('region', { name: `${currentMonth} calendar` });
+    expect(region).toBeInTheDocument();
+    // Day labels are present as text
+    expect(screen.getByText('Sun')).toBeInTheDocument();
+    expect(screen.getByText('Sat')).toBeInTheDocument();
+  });
+
+  it('date cells have role="button" with descriptive aria-label', () => {
+    render(<CalendarView events={mockEvents} />);
+    const todayFormatted = format(today, 'yyyy-MM-dd');
+    const cell = screen.getByTestId(`calendar-day-${todayFormatted}`);
+    expect(cell).toHaveAttribute('role', 'button');
+    const label = cell.getAttribute('aria-label')!;
+    expect(label).toContain(format(today, 'EEEE'));
+    // Today's cell has 3 events (High Priority, Low Priority, Colored)
+    expect(label).toContain('3 events');
+  });
+
+  it('date cells are keyboard accessible', () => {
+    const onDateClick = vi.fn();
+    render(<CalendarView events={[]} onDateClick={onDateClick} />);
+    const todayFormatted = format(today, 'yyyy-MM-dd');
+    const cell = screen.getByTestId(`calendar-day-${todayFormatted}`);
+    expect(cell).toHaveAttribute('tabindex', '0');
+    fireEvent.keyDown(cell, { key: 'Enter' });
+    expect(onDateClick).toHaveBeenCalled();
+  });
+
+  it('events are keyboard accessible', () => {
+    const onEventClick = vi.fn();
+    render(<CalendarView events={mockEvents} onEventClick={onEventClick} />);
+    const event = screen.getByTestId('event-1');
+    fireEvent.keyDown(event, { key: 'Enter' });
+    expect(onEventClick).toHaveBeenCalledWith(mockEvents[0]);
+  });
+
+  it('Today button has descriptive aria-label', () => {
+    render(<CalendarView events={[]} />);
+    const todayBtn = screen.getByRole('button', { name: /Go to today/i });
+    expect(todayBtn).toBeInTheDocument();
+  });
+
   it('shows +more indicator for dates with many events', () => {
     const manyEvents: CalendarEvent[] = [
       ...mockEvents.filter(e => format(new Date(e.start), 'yyyy-MM-dd') === format(today, 'yyyy-MM-dd')),

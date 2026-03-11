@@ -59,6 +59,14 @@ export interface Task {
   dependencies: TaskBrief[];
   subtask_count: number;
   subtask_completed: number;
+  agent_id?: number;
+  agent?: {
+    id: number;
+    name: string;
+    agent_type: AgentType;
+    status: AgentStatus;
+    is_alive: boolean;
+  };
 }
 
 export interface GanttTask {
@@ -92,7 +100,7 @@ export interface CalendarEvent {
   title: string;
   start: string;
   end: string;
-  color: string;
+  color?: string;
   status: TaskStatus;
   priority: TaskPriority;
   project_id: number;
@@ -110,6 +118,12 @@ export interface Reminder {
   created_at: string;
 }
 
+export interface SubtaskInput {
+  id?: number;
+  title: string;
+  completed: boolean;
+}
+
 export interface CreateTaskInput {
   title: string;
   description?: string;
@@ -123,6 +137,8 @@ export interface CreateTaskInput {
   parent_id?: number;
   assignee_ids?: number[];
   dependency_ids?: number[];
+  agent_id?: number | null;
+  subtasks?: SubtaskInput[];
 }
 
 export interface UpdateTaskInput {
@@ -139,4 +155,63 @@ export interface UpdateTaskInput {
   position?: number;
   assignee_ids?: number[];
   dependency_ids?: number[];
+  agent_id?: number | null;
+  subtasks?: SubtaskInput[];
+}
+
+// ============ Agent Types ============
+export type AgentType = 'claude_code' | 'tiny_mind' | 'hestia' | 'custom';
+export type AgentStatus = 'idle' | 'working' | 'waiting' | 'error' | 'offline';
+
+export interface Agent {
+  id: number;
+  name: string;
+  agent_type: AgentType;
+  status: AgentStatus;
+  capabilities: string[];
+  session_id?: string;
+  last_heartbeat?: string;
+  current_task_id?: number;
+  current_task?: TaskBrief;
+  is_alive: boolean;
+  created_at: string;
+}
+
+export interface AgentAction {
+  id: number;
+  agent_id: number;
+  agent_name?: string;
+  agent_type?: AgentType;
+  action_type: string;
+  summary: string;
+  detail?: string;
+  task_id?: number;
+  metadata?: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface GitHubLink {
+  id: number;
+  task_id?: number;
+  project_id?: number;
+  github_repo: string;
+  github_type: 'issue' | 'pull_request' | 'commit';
+  github_id: string;
+  github_url: string;
+  title?: string;
+  state: string;
+  created_at: string;
+}
+
+export interface OrchestratorStatus {
+  active_agents: number;
+  max_agents: number;
+  queue_depth: number;
+  agents: Array<{
+    id: number;
+    name: string;
+    agent_type: AgentType;
+    status: AgentStatus;
+    is_alive: boolean;
+  }>;
 }

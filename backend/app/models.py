@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, ForeignKey, Table, Enum as SQLEnum
+from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, ForeignKey, Table, Enum as SQLEnum, Index
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.database import Base
@@ -34,6 +34,21 @@ class TaskPriority(enum.Enum):
     MEDIUM = "medium"
     HIGH = "high"
     URGENT = "urgent"
+
+
+class AgentType(enum.Enum):
+    CLAUDE_CODE = "claude_code"
+    TINY_MIND = "tiny_mind"
+    HESTIA = "hestia"
+    CUSTOM = "custom"
+
+
+class AgentStatus(enum.Enum):
+    IDLE = "idle"
+    WORKING = "working"
+    WAITING = "waiting"
+    ERROR = "error"
+    OFFLINE = "offline"
 
 
 class User(Base):
@@ -98,6 +113,9 @@ class Task(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
+    # Agent assignment
+    agent_id = Column(Integer, ForeignKey("agents.id", ondelete="SET NULL"), nullable=True)
+
     # Relationships
     project = relationship("Project", back_populates="tasks")
     parent = relationship("Task", remote_side=[id], backref="subtasks")
@@ -110,6 +128,7 @@ class Task(Base):
         backref="dependents"
     )
     reminders = relationship("Reminder", back_populates="task", cascade="all, delete-orphan")
+    agent = relationship("Agent", back_populates="assigned_tasks", foreign_keys=[agent_id])
 
 
 class Reminder(Base):
@@ -140,3 +159,66 @@ class PasswordResetToken(Base):
 
     # Relationships
     user = relationship("User")
+
+
+class Agent(Base):
+    __tablename__ = "agents"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(255), nullable=False)
+    agent_type = Column(SQLEnum(AgentType), nullable=False)
+    status = Column(SQLEnum(AgentStatus), default=AgentStatus.IDLE)
+    capabilities = Column(Text, default="[]")  # JSON list
+    session_id = Column(String(255), unique=True, index=True)
+    api_key = Column(String(255), unique=True, index=True, nullable=False)
+    metadata_json = Column(Text)  # Agent-specific data (PID, path, etc.)
+    last_heartbeat = Column(DateTime(timezone=True), nullable=True)
+    current_task_id = Column(Integer, ForeignKey("tasks.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    # Relationships
+    current_task = relationship("Task", foreign_keys=[current_task_id])
+    assigned_tasks = relationship("Task", back_populates="agent", foreign_keys="Task.agent_id")
+    actions = relationship("AgentAction", back_populates="agent", cascade="all, delete-orphan",
+                           order_by="AgentAction.created_at.desc()")
+
+
+class AgentAction(Base):
+    __tablename__ = "agent_actions"
+    __table_args__ = (
+        Index("ix_agent_actions_agent_created", "agent_id", "created_at"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    agent_id = Column(Integer, ForeignKey("agents.id", ondelete="CASCADE"), nullable=False)
+    action_type = Column(String(50), nullable=False)  # tool_call, tool_result, decision, status_change, error, github_push, github_pr, task_update
+    summary = Column(String(500), nullable=False)
+    detail = Column(Text)
+    task_id = Column(Integer, ForeignKey("tasks.id", ondelete="SET NULL"), nullable=True)
+    metadata_json = Column(Text)  # Structured data for the action
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    # Relationships
+    agent = relationship("Agent", back_populates="actions")
+    task = relationship("Task")
+
+
+class GitHubLink(Base):
+    __tablename__ = "github_links"
+
+    id = Column(Integer, primary_key=True, index=True)
+    task_id = Column(Integer, ForeignKey("tasks.id", ondelete="CASCADE"), nullable=True)
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=True)
+    github_repo = Column(String(255), nullable=False)
+    github_type = Column(String(20), nullable=False)  # issue, pull_request, commit
+    github_id = Column(String(100), nullable=False)
+    github_url = Column(String(500), nullable=False)
+    title = Column(String(500))
+    state = Column(String(20), default="open")  # open, closed, merged
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    # Relationships
+    task = relationship("Task")
+    project = relationship("Project")

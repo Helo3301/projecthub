@@ -14,6 +14,15 @@
         -webkit-overflow-scrolling: touch;
       }
     </style>
+    <script>
+      // Apply dark mode before first paint to prevent flash
+      try {
+        const stored = JSON.parse(localStorage.getItem('projecthub-storage') || '{}');
+        if (stored.state && stored.state.darkMode) {
+          document.documentElement.classList.add('dark');
+        }
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>
