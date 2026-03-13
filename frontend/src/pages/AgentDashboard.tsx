@@ -4,11 +4,12 @@ import {
   Bot, Circle, Pause, Play, Trash2, ChevronDown, ChevronRight,
   GitBranch, Zap, AlertTriangle, MessageSquare, RefreshCw,
   ArrowUp, CheckCircle, Search, X, Clock, Shield, Activity,
-  Hash, Copy, Check, ExternalLink
+  Hash, Copy, Check, ExternalLink, Send, StopCircle, RotateCcw,
+  Mail, Inbox, ListTodo, ArrowRight
 } from 'lucide-react';
 import { agents as agentsApi } from '@/lib/api';
 import { useAgentFeed } from '@/hooks/useAgentFeed';
-import type { Agent, AgentAction, AgentStatus, AgentType } from '@/types';
+import type { Agent, AgentAction, AgentStatus, AgentType, AgentMessage, AgentDirective, TaskQueueItem, DirectiveType } from '@/types';
 
 // ============ Constants ============
 
@@ -37,6 +38,8 @@ const ACTION_STYLES: Record<string, { color: string; icon: typeof Zap; label: st
   github_push: { color: 'bg-orange-500/20 text-orange-300 border-orange-500/30', icon: GitBranch, label: 'Push' },
   github_pr: { color: 'bg-orange-500/20 text-orange-300 border-orange-500/30', icon: GitBranch, label: 'PR' },
   task_update: { color: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30', icon: RefreshCw, label: 'Task' },
+  directive: { color: 'bg-amber-500/20 text-amber-300 border-amber-500/30', icon: Send, label: 'Directive' },
+  message: { color: 'bg-teal-500/20 text-teal-300 border-teal-500/30', icon: Mail, label: 'Message' },
 };
 
 const FILTER_OPTIONS: Array<{ value: string | null; label: string }> = [
@@ -46,6 +49,7 @@ const FILTER_OPTIONS: Array<{ value: string | null; label: string }> = [
   { value: 'github', label: 'GitHub' },
   { value: 'error', label: 'Errors' },
   { value: 'status_change', label: 'Status' },
+  { value: 'directive', label: 'Directives' },
 ];
 
 // ============ Helpers ============
@@ -317,17 +321,43 @@ function AgentDetailPanel({
   colorHex,
   onClose,
   actionsLoading = false,
+  onSendDirective,
 }: {
   agent: Agent;
   actions: AgentAction[];
   colorHex: string;
   onClose: () => void;
   actionsLoading?: boolean;
+  onSendDirective: (agentId: number, type: DirectiveType, payload?: Record<string, unknown>) => Promise<void>;
 }) {
   const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [directiveLoading, setDirectiveLoading] = useState<string | null>(null);
+  const [messageInput, setMessageInput] = useState('');
+  const [detailTab, setDetailTab] = useState<'info' | 'messages'>('info');
   const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const agentActions = actions.filter(a => a.agent_id === agent.id).slice(0, 50);
+
+  const { data: inbox = [] } = useQuery({
+    queryKey: ['agent-inbox', agent.id],
+    queryFn: () => agentsApi.getInbox(agent.id, 20),
+    refetchInterval: 10000,
+  });
+
+  const handleDirective = async (type: DirectiveType, payload?: Record<string, unknown>) => {
+    setDirectiveLoading(type);
+    try {
+      await onSendDirective(agent.id, type, payload);
+    } finally {
+      setDirectiveLoading(null);
+    }
+  };
+
+  const handleSendMessage = async () => {
+    if (!messageInput.trim()) return;
+    await handleDirective('message', { message: messageInput.trim() });
+    setMessageInput('');
+  };
 
   useEffect(() => {
     return () => {
@@ -477,7 +507,123 @@ function AgentDetailPanel({
           </div>
         )}
 
-        {/* Recent Actions */}
+        {/* Directive Controls */}
+        {agent.is_alive && (
+          <div className="mb-4">
+            <p className="text-xs text-gray-500 mb-2">Controls</p>
+            <div className="flex flex-wrap gap-1.5">
+              {agent.status === 'working' && (
+                <button
+                  onClick={() => handleDirective('pause')}
+                  disabled={directiveLoading === 'pause'}
+                  className="flex items-center gap-1 px-2 py-1 text-xs bg-yellow-500/10 text-yellow-400 border border-yellow-500/30 rounded hover:bg-yellow-500/20 transition-colors disabled:opacity-50"
+                >
+                  <Pause className="w-3 h-3" /> {directiveLoading === 'pause' ? '...' : 'Pause'}
+                </button>
+              )}
+              {(agent.status === 'waiting' || agent.status === 'idle') && (
+                <button
+                  onClick={() => handleDirective('resume')}
+                  disabled={directiveLoading === 'resume'}
+                  className="flex items-center gap-1 px-2 py-1 text-xs bg-green-500/10 text-green-400 border border-green-500/30 rounded hover:bg-green-500/20 transition-colors disabled:opacity-50"
+                >
+                  <Play className="w-3 h-3" /> {directiveLoading === 'resume' ? '...' : 'Resume'}
+                </button>
+              )}
+              {agent.current_task && (
+                <button
+                  onClick={() => handleDirective('cancel')}
+                  disabled={directiveLoading === 'cancel'}
+                  className="flex items-center gap-1 px-2 py-1 text-xs bg-red-500/10 text-red-400 border border-red-500/30 rounded hover:bg-red-500/20 transition-colors disabled:opacity-50"
+                >
+                  <StopCircle className="w-3 h-3" /> {directiveLoading === 'cancel' ? '...' : 'Cancel Task'}
+                </button>
+              )}
+            </div>
+            {/* Quick Message */}
+            <div className="mt-2 flex gap-1">
+              <input
+                type="text"
+                value={messageInput}
+                onChange={e => setMessageInput(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') handleSendMessage(); }}
+                placeholder="Send message..."
+                className="flex-1 px-2 py-1 text-xs bg-gray-800 border border-gray-700 rounded text-gray-300 placeholder-gray-600 focus:outline-none focus:border-indigo-500/50"
+              />
+              <button
+                onClick={handleSendMessage}
+                disabled={!messageInput.trim() || directiveLoading === 'message'}
+                className="p-1 text-indigo-400 hover:text-indigo-300 disabled:text-gray-600 disabled:cursor-not-allowed"
+                aria-label="Send message"
+              >
+                <Send className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Tab Switcher */}
+        <div className="flex gap-2 mb-2 border-b border-gray-700">
+          <button
+            onClick={() => setDetailTab('info')}
+            className={`px-2 py-1 text-xs font-medium border-b-2 transition-colors ${
+              detailTab === 'info'
+                ? 'border-indigo-500 text-indigo-400'
+                : 'border-transparent text-gray-500 hover:text-gray-300'
+            }`}
+          >
+            Activity
+          </button>
+          <button
+            onClick={() => setDetailTab('messages')}
+            className={`px-2 py-1 text-xs font-medium border-b-2 transition-colors flex items-center gap-1 ${
+              detailTab === 'messages'
+                ? 'border-indigo-500 text-indigo-400'
+                : 'border-transparent text-gray-500 hover:text-gray-300'
+            }`}
+          >
+            <Mail className="w-3 h-3" />
+            Messages
+            {inbox.filter(m => m.status === 'pending').length > 0 && (
+              <span className="px-1 py-0.5 text-[9px] bg-indigo-500 text-white rounded-full leading-none">
+                {inbox.filter(m => m.status === 'pending').length}
+              </span>
+            )}
+          </button>
+        </div>
+
+        {/* Tab Content */}
+        {detailTab === 'messages' ? (
+          <div>
+            {inbox.length === 0 ? (
+              <p className="text-xs text-gray-600 italic">No messages</p>
+            ) : (
+              <div className="space-y-2 max-h-48 overflow-y-auto">
+                {inbox.map(msg => (
+                  <div key={msg.id} className={`p-2 rounded border text-xs ${
+                    msg.status === 'pending'
+                      ? 'bg-indigo-500/5 border-indigo-500/20'
+                      : 'bg-gray-800/50 border-gray-700'
+                  }`}>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-gray-400 font-medium">
+                        {msg.sender_name || `Agent #${msg.sender_id}`}
+                      </span>
+                      <span className="text-[10px] text-gray-600">{timeAgo(msg.created_at)}</span>
+                    </div>
+                    <p className="text-gray-300 font-medium">{msg.subject}</p>
+                    {msg.body && <p className="text-gray-400 mt-0.5">{msg.body}</p>}
+                    {msg.status === 'pending' && (
+                      <span className="inline-block mt-1 px-1 py-0.5 text-[9px] bg-blue-500/20 text-blue-400 rounded">
+                        unread
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
         <div>
           <p className="text-xs text-gray-500 mb-2">Recent Activity</p>
           {agentActions.length === 0 ? (
@@ -502,7 +648,61 @@ function AgentDetailPanel({
             </div>
           )}
         </div>
+        )}
       </div>
+    </div>
+  );
+}
+
+// ============ Task Queue Panel ============
+
+function TaskQueuePanel() {
+  const { data: queue = [], isLoading } = useQuery({
+    queryKey: ['task-queue'],
+    queryFn: () => agentsApi.getTaskQueue(),
+    refetchInterval: 15000,
+  });
+
+  const priorityColors: Record<string, string> = {
+    urgent: 'text-red-400 bg-red-500/10',
+    high: 'text-orange-400 bg-orange-500/10',
+    medium: 'text-yellow-400 bg-yellow-500/10',
+    low: 'text-gray-400 bg-gray-500/10',
+  };
+
+  return (
+    <div className="p-4 border-b border-gray-800">
+      <div className="flex items-center gap-2 mb-3">
+        <ListTodo className="w-4 h-4 text-indigo-400" />
+        <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Task Queue</h3>
+        <span className="text-xs text-gray-500">({queue.length})</span>
+      </div>
+      {isLoading ? (
+        <div className="space-y-2">
+          {[1, 2].map(i => <div key={i} className="h-10 bg-gray-800 rounded animate-pulse" />)}
+        </div>
+      ) : queue.length === 0 ? (
+        <p className="text-xs text-gray-600 italic">No tasks available for agents</p>
+      ) : (
+        <div className="space-y-1.5 max-h-48 overflow-y-auto">
+          {queue.map(task => (
+            <div key={task.id} className="flex items-center gap-2 p-2 bg-gray-800 border border-gray-700 rounded text-xs">
+              <span className={`px-1 py-0.5 rounded text-[10px] font-medium ${priorityColors[task.priority] || ''}`}>
+                {task.priority.toUpperCase()}
+              </span>
+              <div className="flex-1 min-w-0">
+                <p className="text-gray-200 truncate">{task.title}</p>
+                {task.project_name && (
+                  <p className="text-[10px] text-gray-500">{task.project_name}</p>
+                )}
+              </div>
+              {task.estimated_hours && (
+                <span className="text-[10px] text-gray-500 flex-shrink-0">{task.estimated_hours}h</span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -645,6 +845,14 @@ export default function AgentDashboard() {
     queryClient.invalidateQueries({ queryKey: ['orchestrator-status'] });
     queryClient.invalidateQueries({ queryKey: ['agent-feed'] });
   }, [queryClient, agentFilter, selectedAgentId]);
+
+  const handleSendDirective = useCallback(async (agentId: number, type: DirectiveType, payload?: Record<string, unknown>) => {
+    await agentsApi.sendDirective(agentId, type, payload);
+    queryClient.invalidateQueries({ queryKey: ['agents'] });
+    queryClient.invalidateQueries({ queryKey: ['orchestrator-status'] });
+    queryClient.invalidateQueries({ queryKey: ['agent-feed'] });
+    queryClient.invalidateQueries({ queryKey: ['task-queue'] });
+  }, [queryClient]);
 
   const handleClear = useCallback(() => {
     clear();
@@ -895,8 +1103,11 @@ Authorization: Bearer <jwt>
                 setSelectedAgentId(null);
                 setAgentFilter(null);
               }}
+              onSendDirective={handleSendDirective}
             />
           ) : (
+            <div>
+            <TaskQueuePanel />
             <div className="p-4">
               <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">Status</h2>
 
@@ -1010,6 +1221,7 @@ Authorization: Bearer <jwt>
                 </div>
               </div>
               )}
+            </div>
             </div>
           )}
         </div>
