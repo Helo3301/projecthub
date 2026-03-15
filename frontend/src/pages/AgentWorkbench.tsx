@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Bot, Send, Plus, X, Square, Play, ListTodo,
-  ChevronDown, Circle, Terminal, ArrowRight
+  ChevronDown, Circle, Terminal, ArrowRight, CheckCircle
 } from 'lucide-react';
 import { agents as agentsApi } from '@/lib/api';
 import type { TaskQueueItem } from '@/types';
@@ -26,6 +26,7 @@ interface AgentSlot {
   messages: ChatMessage[];
   cwd: string;
   streamBuffer: string; // accumulates chunks for current response
+  autoCycle: boolean; // auto-pick next task on completion
 }
 
 const DEFAULT_CWD = '/home/hestiasadmin/projects/ao3-downloader';
@@ -35,7 +36,7 @@ function createEmptySlot(id: number): AgentSlot {
   return {
     id, agentId: null, status: 'empty', sessionId: null,
     taskId: null, taskTitle: null, messages: [], cwd: DEFAULT_CWD,
-    streamBuffer: '',
+    streamBuffer: '', autoCycle: false,
   };
 }
 
@@ -120,6 +121,8 @@ function AgentPanel({
   onSpawn,
   onKill,
   onPickTask,
+  onToggleAutoCycle,
+  onClearSlot,
 }: {
   slot: AgentSlot;
   isActive: boolean;
@@ -128,6 +131,8 @@ function AgentPanel({
   onSpawn: (prompt: string) => void;
   onKill: () => void;
   onPickTask: () => void;
+  onToggleAutoCycle: () => void;
+  onClearSlot: () => void;
 }) {
   const [input, setInput] = useState('');
   const [showSpawn, setShowSpawn] = useState(false);
@@ -192,13 +197,26 @@ function AgentPanel({
             {statusLabels[slot.status]}
           </span>
           {slot.status !== 'empty' && (
-            <button
-              onClick={e => { e.stopPropagation(); onKill(); }}
-              className="p-0.5 text-gray-600 hover:text-red-400 transition-colors"
-              title="Kill agent"
-            >
-              <Square className="w-3 h-3" />
-            </button>
+            <>
+              <button
+                onClick={e => { e.stopPropagation(); onToggleAutoCycle(); }}
+                className={`px-1 py-0.5 text-[9px] rounded transition-colors ${
+                  slot.autoCycle
+                    ? 'bg-green-500/20 text-green-400 border border-green-500/30'
+                    : 'bg-gray-700 text-gray-500 border border-gray-600'
+                }`}
+                title={slot.autoCycle ? 'Auto-cycle ON: will pick next task on completion' : 'Auto-cycle OFF'}
+              >
+                Auto
+              </button>
+              <button
+                onClick={e => { e.stopPropagation(); onKill(); }}
+                className="p-0.5 text-gray-600 hover:text-red-400 transition-colors"
+                title="Kill agent"
+              >
+                <Square className="w-3 h-3" />
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -241,6 +259,32 @@ function AgentPanel({
           </>
         )}
       </div>
+
+      {/* Completion Banner */}
+      {slot.status === 'waiting' && slot.taskTitle && (
+        <div className="border-t border-gray-700 px-3 py-2 bg-green-500/5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <CheckCircle className="w-3.5 h-3.5 text-green-400" />
+              <span className="text-xs text-green-400 font-medium">Task complete</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={e => { e.stopPropagation(); onPickTask(); }}
+                className="flex items-center gap-1 px-2 py-1 text-[10px] bg-indigo-500/10 text-indigo-400 border border-indigo-500/30 rounded hover:bg-indigo-500/20"
+              >
+                <ArrowRight className="w-2.5 h-2.5" /> Next Task
+              </button>
+              <button
+                onClick={e => { e.stopPropagation(); onClearSlot(); }}
+                className="px-2 py-1 text-[10px] text-gray-500 hover:text-gray-300"
+              >
+                Clear
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Input */}
       <div className="border-t border-gray-700 p-2">
@@ -322,6 +366,9 @@ export default function AgentWorkbench() {
     };
   }, []);
 
+  // Queue for auto-cycle: slotIds that need the next task
+  const autoCycleQueueRef = useRef<number[]>([]);
+
   const handleWsMessage = useCallback((msg: any) => {
     const agentId = msg.agent_id;
     if (!agentId) return;
@@ -345,6 +392,16 @@ export default function AgentWorkbench() {
                 text: slot.streamBuffer,
                 timestamp: Date.now(),
               });
+            }
+            // Queue auto-cycle if enabled
+            if (slot.autoCycle && slot.taskId) {
+              newMessages.push({
+                id: `${Date.now()}-sys`,
+                role: 'system',
+                text: `Task complete. Auto-cycling to next task...`,
+                timestamp: Date.now(),
+              });
+              autoCycleQueueRef.current.push(slot.id);
             }
             return { ...slot, status: newStatus, messages: newMessages, streamBuffer: '',
                      sessionId: msg.session_id || slot.sessionId };
@@ -370,6 +427,34 @@ export default function AgentWorkbench() {
       }
     }));
   }, []);
+
+  // Process auto-cycle queue
+  useEffect(() => {
+    if (autoCycleQueueRef.current.length === 0) return;
+
+    const slotIds = [...autoCycleQueueRef.current];
+    autoCycleQueueRef.current = [];
+
+    // Fetch next available task and assign it
+    (async () => {
+      try {
+        const tasks = await agentsApi.getTaskQueue(undefined, 5);
+        for (const slotId of slotIds) {
+          const task = tasks.shift();
+          if (task) {
+            // Clear the old slot and start fresh with the new task
+            handleClearSlot(slotId);
+            // Small delay to let the clear propagate
+            setTimeout(() => {
+              handleTaskSelect(slotId, task);
+            }, 500);
+          }
+        }
+      } catch {
+        // Ignore — user can manually pick next task
+      }
+    })();
+  }, [slots]); // re-check when slots update
 
   const sendWs = useCallback((data: any) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -432,17 +517,46 @@ export default function AgentWorkbench() {
     setSlots(prev => prev.map(s => s.id === slotId ? createEmptySlot(s.id) : s));
   }, [slots, sendWs]);
 
+  const handleToggleAutoCycle = useCallback((slotId: number) => {
+    setSlots(prev => prev.map(s =>
+      s.id === slotId ? { ...s, autoCycle: !s.autoCycle } : s
+    ));
+  }, []);
+
+  const handleClearSlot = useCallback((slotId: number) => {
+    const slot = slots.find(s => s.id === slotId);
+    if (slot?.agentId) {
+      sendWs({ type: 'kill', agent_id: slot.agentId });
+    }
+    setSlots(prev => prev.map(s => s.id === slotId ? createEmptySlot(s.id) : s));
+  }, [slots, sendWs]);
+
   const handleTaskSelect = useCallback((slotId: number, task: TaskQueueItem) => {
     setTaskPickerSlot(null);
-    // Build prompt from task
+
+    // Extract PR URL from description
+    const prUrlMatch = task.description?.match(/https:\/\/github\.com\/[^\s]+/);
+    const prUrl = prUrlMatch ? prUrlMatch[0] : '';
+    const prNumber = task.description?.match(/PR #(\d+)/)?.[1] || '';
+
+    // Build a pipeline prompt that tells the agent exactly what to do
     const prompt = [
-      `You have been assigned this task:`,
+      `You have been assigned this task. Follow the CLAUDE.md instructions in this repo exactly.`,
       ``,
-      `**${task.title}**`,
-      task.description ? `\n${task.description}` : '',
+      `## Task: ${task.title}`,
+      prUrl ? `## PR: ${prUrl}` : '',
+      task.description ? `\n## Description\n${task.description.slice(0, 1500)}` : '',
       ``,
-      `Please review this PR, provide feedback, and implement any necessary changes.`,
-      `When done, commit your work and create a PR.`,
+      `## Your Instructions`,
+      `1. Read CLAUDE.md for project rules`,
+      `2. Read the PR description${prUrl ? ` at ${prUrl}` : ''} to understand what's needed`,
+      `3. Read the relevant work package in work-packages/ and acceptance tests in tests/acceptance/`,
+      `4. Create a worktree: git worktree add .claude/worktrees/pr-${prNumber || task.id} -b fix/pr-${prNumber || task.id}`,
+      `5. Implement the feature or fix cleanly`,
+      `6. Run the relevant acceptance tests`,
+      `7. Commit with a descriptive message`,
+      `8. Push and create a PR: git push -u origin fix/pr-${prNumber || task.id} && gh pr create`,
+      `9. When the PR is created, you are DONE. Report the PR URL.`,
     ].filter(Boolean).join('\n');
 
     setSlots(prev => prev.map(s => {
@@ -507,6 +621,8 @@ export default function AgentWorkbench() {
             onSpawn={(prompt) => handleSpawn(activeSlotData.id, prompt)}
             onKill={() => handleKill(activeSlotData.id)}
             onPickTask={() => setTaskPickerSlot(activeSlotData.id)}
+            onToggleAutoCycle={() => handleToggleAutoCycle(activeSlotData.id)}
+            onClearSlot={() => handleClearSlot(activeSlotData.id)}
           />
         )}
 
