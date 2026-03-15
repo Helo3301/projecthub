@@ -2,7 +2,8 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Bot, Send, Plus, X, Square, Play, ListTodo,
-  ChevronDown, Circle, Terminal, ArrowRight, CheckCircle
+  ChevronDown, Circle, Terminal, ArrowRight, CheckCircle,
+  LayoutGrid, Columns, Maximize2
 } from 'lucide-react';
 import { agents as agentsApi } from '@/lib/api';
 import type { TaskQueueItem } from '@/types';
@@ -327,12 +328,15 @@ function AgentPanel({
 
 // ============ Main Workbench ============
 
+type LayoutMode = 'grid' | 'tabs' | 'focus';
+
 export default function AgentWorkbench() {
   const [slots, setSlots] = useState<AgentSlot[]>(
     Array.from({ length: MAX_SLOTS }, (_, i) => createEmptySlot(i + 1))
   );
   const [activeSlot, setActiveSlot] = useState(1);
   const [taskPickerSlot, setTaskPickerSlot] = useState<number | null>(null);
+  const [layout, setLayout] = useState<LayoutMode>('grid');
   const wsRef = useRef<WebSocket | null>(null);
   const queryClient = useQueryClient();
 
@@ -584,54 +588,147 @@ export default function AgentWorkbench() {
         </div>
       </div>
 
-      {/* Slot Tabs */}
-      <div className="border-b border-gray-800 px-6 flex gap-1 overflow-x-auto">
-        {slots.map(slot => (
+      {/* Layout Controls */}
+      <div className="border-b border-gray-800 px-6 py-1.5 flex items-center justify-between">
+        <div className="flex items-center gap-1 overflow-x-auto">
+          {layout === 'tabs' && slots.map(slot => (
+            <button
+              key={slot.id}
+              onClick={() => setActiveSlot(slot.id)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border-b-2 transition-colors whitespace-nowrap ${
+                activeSlot === slot.id
+                  ? 'border-indigo-500 text-indigo-400'
+                  : 'border-transparent text-gray-500 hover:text-gray-300'
+              }`}
+            >
+              <Circle className={`w-1.5 h-1.5 fill-current ${
+                slot.status === 'running' ? 'text-green-400'
+                : slot.status === 'waiting' ? 'text-blue-400'
+                : slot.status === 'spawning' ? 'text-yellow-400'
+                : 'text-gray-600'
+              }`} />
+              {slot.taskTitle
+                ? (slot.taskTitle.length > 20 ? slot.taskTitle.slice(0, 20) + '…' : slot.taskTitle)
+                : `Slot ${slot.id}`
+              }
+            </button>
+          ))}
+          {layout !== 'tabs' && (
+            <span className="text-xs text-gray-500">
+              {slots.filter(s => s.status !== 'empty').length} active / {MAX_SLOTS} slots
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-1 flex-shrink-0">
           <button
-            key={slot.id}
-            onClick={() => setActiveSlot(slot.id)}
-            className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium border-b-2 transition-colors whitespace-nowrap ${
-              activeSlot === slot.id
-                ? 'border-indigo-500 text-indigo-400'
-                : 'border-transparent text-gray-500 hover:text-gray-300'
-            }`}
+            onClick={() => setLayout('grid')}
+            className={`p-1.5 rounded transition-colors ${layout === 'grid' ? 'bg-indigo-500/20 text-indigo-400' : 'text-gray-500 hover:text-gray-300'}`}
+            title="Grid — all 5 visible"
           >
-            <Circle className={`w-1.5 h-1.5 fill-current ${
-              slot.status === 'running' ? 'text-green-400'
-              : slot.status === 'waiting' ? 'text-blue-400'
-              : slot.status === 'spawning' ? 'text-yellow-400'
-              : 'text-gray-600'
-            }`} />
-            {slot.taskTitle
-              ? (slot.taskTitle.length > 25 ? slot.taskTitle.slice(0, 25) + '...' : slot.taskTitle)
-              : `Slot ${slot.id}`
-            }
+            <LayoutGrid className="w-3.5 h-3.5" />
           </button>
-        ))}
+          <button
+            onClick={() => setLayout('tabs')}
+            className={`p-1.5 rounded transition-colors ${layout === 'tabs' ? 'bg-indigo-500/20 text-indigo-400' : 'text-gray-500 hover:text-gray-300'}`}
+            title="Tabs — one at a time"
+          >
+            <Columns className="w-3.5 h-3.5" />
+          </button>
+          <button
+            onClick={() => setLayout('focus')}
+            className={`p-1.5 rounded transition-colors ${layout === 'focus' ? 'bg-indigo-500/20 text-indigo-400' : 'text-gray-500 hover:text-gray-300'}`}
+            title="Focus — one big, rest as sidebar"
+          >
+            <Maximize2 className="w-3.5 h-3.5" />
+          </button>
+        </div>
       </div>
 
-      {/* Active Panel */}
-      <div className="h-[calc(100vh-121px)] relative">
-        {activeSlotData && (
-          <AgentPanel
-            slot={activeSlotData}
-            isActive={true}
-            onActivate={() => {}}
-            onSend={(text) => handleSend(activeSlotData.id, text)}
-            onSpawn={(prompt) => handleSpawn(activeSlotData.id, prompt)}
-            onKill={() => handleKill(activeSlotData.id)}
-            onPickTask={() => setTaskPickerSlot(activeSlotData.id)}
-            onToggleAutoCycle={() => handleToggleAutoCycle(activeSlotData.id)}
-            onClearSlot={() => handleClearSlot(activeSlotData.id)}
-          />
+      {/* Panels */}
+      <div className={`h-[calc(100vh-121px)] relative ${
+        layout === 'grid'
+          ? 'grid grid-cols-2 xl:grid-cols-3 gap-1 p-1'
+          : layout === 'focus'
+          ? 'grid grid-cols-[1fr_220px] gap-1 p-1'
+          : ''
+      }`} style={layout === 'grid' ? { gridAutoRows: '1fr' } : undefined}>
+        {layout === 'grid' ? (
+          slots.map(slot => (
+            <AgentPanel
+              key={slot.id}
+              slot={slot}
+              isActive={activeSlot === slot.id}
+              onActivate={() => setActiveSlot(slot.id)}
+              onSend={(text) => handleSend(slot.id, text)}
+              onSpawn={(prompt) => handleSpawn(slot.id, prompt)}
+              onKill={() => handleKill(slot.id)}
+              onPickTask={() => setTaskPickerSlot(slot.id)}
+              onToggleAutoCycle={() => handleToggleAutoCycle(slot.id)}
+              onClearSlot={() => handleClearSlot(slot.id)}
+            />
+          ))
+        ) : layout === 'focus' ? (
+          <>
+            {activeSlotData && (
+              <AgentPanel
+                slot={activeSlotData}
+                isActive={true}
+                onActivate={() => {}}
+                onSend={(text) => handleSend(activeSlotData.id, text)}
+                onSpawn={(prompt) => handleSpawn(activeSlotData.id, prompt)}
+                onKill={() => handleKill(activeSlotData.id)}
+                onPickTask={() => setTaskPickerSlot(activeSlotData.id)}
+                onToggleAutoCycle={() => handleToggleAutoCycle(activeSlotData.id)}
+                onClearSlot={() => handleClearSlot(activeSlotData.id)}
+              />
+            )}
+            <div className="flex flex-col gap-1 overflow-y-auto">
+              {slots.filter(s => s.id !== activeSlot).map(slot => (
+                <button
+                  key={slot.id}
+                  onClick={() => setActiveSlot(slot.id)}
+                  className={`flex items-center gap-2 p-2 text-left border rounded text-xs transition-colors ${
+                    slot.status !== 'empty'
+                      ? 'border-gray-700 bg-gray-800 hover:border-gray-600'
+                      : 'border-gray-800 bg-gray-900 hover:border-gray-700'
+                  }`}
+                >
+                  <Circle className={`w-2 h-2 fill-current flex-shrink-0 ${
+                    slot.status === 'running' ? 'text-green-400'
+                    : slot.status === 'waiting' ? 'text-blue-400'
+                    : 'text-gray-600'
+                  }`} />
+                  <span className="text-gray-300 truncate">
+                    {slot.taskTitle || `Slot ${slot.id}`}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </>
+        ) : (
+          activeSlotData && (
+            <AgentPanel
+              slot={activeSlotData}
+              isActive={true}
+              onActivate={() => {}}
+              onSend={(text) => handleSend(activeSlotData.id, text)}
+              onSpawn={(prompt) => handleSpawn(activeSlotData.id, prompt)}
+              onKill={() => handleKill(activeSlotData.id)}
+              onPickTask={() => setTaskPickerSlot(activeSlotData.id)}
+              onToggleAutoCycle={() => handleToggleAutoCycle(activeSlotData.id)}
+              onClearSlot={() => handleClearSlot(activeSlotData.id)}
+            />
+          )
         )}
 
         {/* Task Picker Overlay */}
         {taskPickerSlot !== null && (
-          <TaskPicker
-            onSelect={(task) => handleTaskSelect(taskPickerSlot, task)}
-            onClose={() => setTaskPickerSlot(null)}
-          />
+          <div className="absolute inset-0 z-20">
+            <TaskPicker
+              onSelect={(task) => handleTaskSelect(taskPickerSlot, task)}
+              onClose={() => setTaskPickerSlot(null)}
+            />
+          </div>
         )}
       </div>
     </div>

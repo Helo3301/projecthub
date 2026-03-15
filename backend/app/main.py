@@ -30,9 +30,9 @@ app.include_router(projects.router, prefix="/api")
 app.include_router(tasks.router, prefix="/api")
 app.include_router(users.router, prefix="/api")
 app.include_router(calendar.router, prefix="/api")
+app.include_router(coordination.router, prefix="/api")  # Before agents — queue/messages must match before /{agent_id}
+app.include_router(runner.router, prefix="/api")         # Before agents — runner/ws must match before /{agent_id}
 app.include_router(agents.router, prefix="/api")
-app.include_router(coordination.router, prefix="/api")
-app.include_router(runner.router, prefix="/api")
 
 
 @app.get("/")
