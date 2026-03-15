@@ -7,7 +7,7 @@ import {
   Hash, Copy, Check, ExternalLink, Send, StopCircle, RotateCcw,
   Mail, Inbox, ListTodo, ArrowRight
 } from 'lucide-react';
-import { agents as agentsApi } from '@/lib/api';
+import { agents as agentsApi, tasks as tasksApi } from '@/lib/api';
 import { useAgentFeed } from '@/hooks/useAgentFeed';
 import type { Agent, AgentAction, AgentStatus, AgentType, AgentMessage, AgentDirective, TaskQueueItem, DirectiveType } from '@/types';
 
@@ -334,6 +334,10 @@ function AgentDetailPanel({
   const [directiveLoading, setDirectiveLoading] = useState<string | null>(null);
   const [messageInput, setMessageInput] = useState('');
   const [detailTab, setDetailTab] = useState<'info' | 'messages'>('info');
+  const [showAssignTask, setShowAssignTask] = useState(false);
+  const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null);
+  const [assignInstructions, setAssignInstructions] = useState('');
+  const [assignLoading, setAssignLoading] = useState(false);
   const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const agentActions = actions.filter(a => a.agent_id === agent.id).slice(0, 50);
@@ -343,6 +347,45 @@ function AgentDetailPanel({
     queryFn: () => agentsApi.getInbox(agent.id, 20),
     refetchInterval: 10000,
   });
+
+  const { data: taskQueue = [] } = useQuery({
+    queryKey: ['task-queue-assign'],
+    queryFn: () => agentsApi.getTaskQueue(undefined, 200),
+    refetchInterval: 15000,
+    enabled: showAssignTask,
+  });
+
+  const queryClient = useQueryClient();
+
+  const handleAssignTask = async () => {
+    if (!selectedTaskId) return;
+    setAssignLoading(true);
+    try {
+      const task = taskQueue.find(t => t.id === selectedTaskId);
+      // Update task to assign it to this agent and set in_progress
+      await tasksApi.update(selectedTaskId, {
+        agent_id: agent.id,
+        status: 'in_progress',
+      });
+      // Send a message directive with the task details
+      await onSendDirective(agent.id, 'message', {
+        type: 'task_assignment',
+        task_id: selectedTaskId,
+        task_title: task?.title || '',
+        task_description: task?.description || '',
+        instructions: assignInstructions,
+        pr_url: task?.description?.match(/https:\/\/github\.com\/[^\s]+/)?.[0] || '',
+      });
+      setShowAssignTask(false);
+      setSelectedTaskId(null);
+      setAssignInstructions('');
+      queryClient.invalidateQueries({ queryKey: ['task-queue'] });
+      queryClient.invalidateQueries({ queryKey: ['task-queue-assign'] });
+      queryClient.invalidateQueries({ queryKey: ['agents'] });
+    } finally {
+      setAssignLoading(false);
+    }
+  };
 
   const handleDirective = async (type: DirectiveType, payload?: Record<string, unknown>) => {
     setDirectiveLoading(type);
@@ -559,6 +602,57 @@ function AgentDetailPanel({
                 <Send className="w-3.5 h-3.5" />
               </button>
             </div>
+          </div>
+        )}
+
+        {/* Assign Task */}
+        {agent.is_alive && (
+          <div className="mb-4">
+            {!showAssignTask ? (
+              <button
+                onClick={() => setShowAssignTask(true)}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs bg-indigo-500/10 text-indigo-400 border border-indigo-500/30 rounded hover:bg-indigo-500/20 transition-colors w-full justify-center"
+              >
+                <ArrowRight className="w-3 h-3" />
+                Assign Task
+              </button>
+            ) : (
+              <div className="p-2.5 bg-gray-800 border border-gray-700 rounded space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs text-gray-400 font-medium">Assign Task</p>
+                  <button onClick={() => { setShowAssignTask(false); setSelectedTaskId(null); setAssignInstructions(''); }} className="text-gray-500 hover:text-gray-300">
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+                <select
+                  value={selectedTaskId ?? ''}
+                  onChange={e => setSelectedTaskId(e.target.value ? Number(e.target.value) : null)}
+                  className="w-full px-2 py-1.5 text-xs bg-gray-900 border border-gray-600 rounded text-gray-300 focus:outline-none focus:border-indigo-500/50"
+                >
+                  <option value="">Select a task...</option>
+                  {taskQueue.map(task => (
+                    <option key={task.id} value={task.id}>
+                      [{task.priority.toUpperCase()}] {task.title}
+                    </option>
+                  ))}
+                </select>
+                <textarea
+                  value={assignInstructions}
+                  onChange={e => setAssignInstructions(e.target.value)}
+                  placeholder="Instructions for the agent (optional)..."
+                  rows={3}
+                  className="w-full px-2 py-1.5 text-xs bg-gray-900 border border-gray-600 rounded text-gray-300 placeholder-gray-600 focus:outline-none focus:border-indigo-500/50 resize-none"
+                />
+                <button
+                  onClick={handleAssignTask}
+                  disabled={!selectedTaskId || assignLoading}
+                  className="w-full flex items-center justify-center gap-1.5 px-2.5 py-1.5 text-xs bg-indigo-600 text-white rounded hover:bg-indigo-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Send className="w-3 h-3" />
+                  {assignLoading ? 'Assigning...' : 'Assign & Send Instructions'}
+                </button>
+              </div>
+            )}
           </div>
         )}
 
