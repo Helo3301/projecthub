@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.database import engine, Base
-from app.routers import auth, projects, tasks, users, calendar, agents, coordination
+from app.routers import auth, projects, tasks, users, calendar, agents, coordination, runner
 from app.config import get_settings
 
 settings = get_settings()
@@ -32,6 +32,7 @@ app.include_router(users.router, prefix="/api")
 app.include_router(calendar.router, prefix="/api")
 app.include_router(agents.router, prefix="/api")
 app.include_router(coordination.router, prefix="/api")
+app.include_router(runner.router, prefix="/api")
 
 
 @app.get("/")
