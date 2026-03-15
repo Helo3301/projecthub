@@ -136,6 +136,7 @@ async def handle_spawn(ws, agent_id: int, msg: dict):
             stderr=asyncio.subprocess.PIPE,
             cwd=cwd,
             preexec_fn=os.setsid,
+            limit=1024 * 1024,  # 1MB line buffer for large stream-json chunks
         )
         _running[agent_id] = {
             "process": proc,
@@ -191,6 +192,7 @@ async def handle_prompt(ws, agent_id: int, msg: dict):
             stderr=asyncio.subprocess.PIPE,
             cwd=cwd,
             preexec_fn=os.setsid,
+            limit=1024 * 1024,  # 1MB line buffer
         )
         info["process"] = proc
 
