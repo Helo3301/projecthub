@@ -1,7 +1,16 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render as rtlRender, screen, fireEvent, RenderOptions } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { TaskModal } from './TaskModal';
 import type { Task, UserBrief } from '@/types';
+
+function render(ui: React.ReactElement, options?: Omit<RenderOptions, 'wrapper'>) {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const Wrapper = ({ children }: { children: React.ReactNode }) => (
+    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+  );
+  return rtlRender(ui, { wrapper: Wrapper, ...options });
+}
 
 const mockUsers: UserBrief[] = [
   { id: 1, username: 'john', full_name: 'John Doe', avatar_color: '#4F46E5' },
@@ -257,7 +266,7 @@ describe('TaskModal', () => {
     expect(screen.getByTestId('delete-task-btn')).toBeInTheDocument();
   });
 
-  it('calls onDelete when delete button clicked', () => {
+  it('calls onDelete when delete button clicked and confirmed', () => {
     render(
       <TaskModal
         isOpen={true}
@@ -270,7 +279,10 @@ describe('TaskModal', () => {
       />
     );
 
+    // First click shows confirmation
     fireEvent.click(screen.getByTestId('delete-task-btn'));
+    // Second click confirms deletion
+    fireEvent.click(screen.getByTestId('confirm-delete-btn'));
     expect(mockOnDelete).toHaveBeenCalled();
   });
 
@@ -334,5 +346,202 @@ describe('TaskModal', () => {
 
     const select = screen.getByTestId('task-priority-select');
     expect(select.querySelectorAll('option')).toHaveLength(4);
+  });
+
+  it('uses initialStatus when creating a new task', () => {
+    render(
+      <TaskModal
+        isOpen={true}
+        onClose={mockOnClose}
+        onSave={mockOnSave}
+        projectId={1}
+        users={mockUsers}
+        initialStatus="in_progress"
+      />
+    );
+
+    expect(screen.getByTestId('task-status-select')).toHaveValue('in_progress');
+  });
+
+  it('resets form fields when reopening without a task', () => {
+    const { rerender } = render(
+      <TaskModal
+        isOpen={true}
+        onClose={mockOnClose}
+        onSave={mockOnSave}
+        projectId={1}
+        users={mockUsers}
+      />
+    );
+
+    // Type into the title field
+    fireEvent.change(screen.getByTestId('task-title-input'), {
+      target: { value: 'Draft Task' },
+    });
+    expect(screen.getByTestId('task-title-input')).toHaveValue('Draft Task');
+
+    // Close the modal
+    rerender(
+      <TaskModal
+        isOpen={false}
+        onClose={mockOnClose}
+        onSave={mockOnSave}
+        projectId={1}
+        users={mockUsers}
+      />
+    );
+
+    // Reopen the modal — form should be reset
+    rerender(
+      <TaskModal
+        isOpen={true}
+        onClose={mockOnClose}
+        onSave={mockOnSave}
+        projectId={1}
+        users={mockUsers}
+      />
+    );
+
+    expect(screen.getByTestId('task-title-input')).toHaveValue('');
+  });
+
+  it('populates form when switching from no task to task', () => {
+    const { rerender } = render(
+      <TaskModal
+        isOpen={true}
+        onClose={mockOnClose}
+        onSave={mockOnSave}
+        projectId={1}
+        users={mockUsers}
+      />
+    );
+
+    expect(screen.getByTestId('task-title-input')).toHaveValue('');
+
+    rerender(
+      <TaskModal
+        isOpen={true}
+        onClose={mockOnClose}
+        onSave={mockOnSave}
+        task={mockTask}
+        projectId={1}
+        users={mockUsers}
+      />
+    );
+
+    expect(screen.getByTestId('task-title-input')).toHaveValue('Test Task');
+  });
+
+  it('shows existing assignees when editing a task', () => {
+    render(
+      <TaskModal
+        isOpen={true}
+        onClose={mockOnClose}
+        onSave={mockOnSave}
+        task={mockTask}
+        projectId={1}
+        users={mockUsers}
+      />
+    );
+
+    // mockTask has mockUsers[0] assigned
+    const assigneeBtn = screen.getByTestId('assignee-1');
+    expect(assigneeBtn).toHaveClass('bg-primary-100');
+  });
+
+  it('shows existing subtasks when editing a task', () => {
+    render(
+      <TaskModal
+        isOpen={true}
+        onClose={mockOnClose}
+        onSave={mockOnSave}
+        task={mockTask}
+        projectId={1}
+        users={mockUsers}
+      />
+    );
+
+    expect(screen.getByText('Subtask 1')).toBeInTheDocument();
+  });
+
+  it('removes subtask when remove button clicked', () => {
+    render(
+      <TaskModal
+        isOpen={true}
+        onClose={mockOnClose}
+        onSave={mockOnSave}
+        task={mockTask}
+        projectId={1}
+        users={mockUsers}
+      />
+    );
+
+    expect(screen.getByText('Subtask 1')).toBeInTheDocument();
+    const subtaskEl = screen.getByTestId('subtask-0');
+    const removeBtn = subtaskEl.querySelector('button')!;
+    fireEvent.click(removeBtn);
+    expect(screen.queryByText('Subtask 1')).not.toBeInTheDocument();
+  });
+
+  it('shows reminder button when editing an existing task', () => {
+    render(
+      <TaskModal
+        isOpen={true}
+        onClose={mockOnClose}
+        onSave={mockOnSave}
+        task={mockTask}
+        projectId={1}
+        users={mockUsers}
+      />
+    );
+    expect(screen.getByTestId('reminder-btn')).toBeInTheDocument();
+    expect(screen.getByText('Reminders')).toBeInTheDocument();
+  });
+
+  it('does not show reminder button when creating a new task', () => {
+    render(
+      <TaskModal
+        isOpen={true}
+        onClose={mockOnClose}
+        onSave={mockOnSave}
+        projectId={1}
+        users={mockUsers}
+      />
+    );
+    expect(screen.queryByTestId('reminder-btn')).not.toBeInTheDocument();
+  });
+
+  it('opens reminder modal when reminder button clicked', () => {
+    render(
+      <TaskModal
+        isOpen={true}
+        onClose={mockOnClose}
+        onSave={mockOnSave}
+        task={mockTask}
+        projectId={1}
+        users={mockUsers}
+      />
+    );
+    fireEvent.click(screen.getByTestId('reminder-btn'));
+    expect(screen.getByTestId('reminder-modal')).toBeInTheDocument();
+  });
+
+  it('does not close task modal when Escape pressed while reminder modal is open', () => {
+    render(
+      <TaskModal
+        isOpen={true}
+        onClose={mockOnClose}
+        onSave={mockOnSave}
+        task={mockTask}
+        projectId={1}
+        users={mockUsers}
+      />
+    );
+    fireEvent.click(screen.getByTestId('reminder-btn'));
+    expect(screen.getByTestId('reminder-modal')).toBeInTheDocument();
+
+    // Escape should close reminder modal but NOT call TaskModal's onClose
+    fireEvent.keyDown(screen.getByTestId('reminder-modal'), { key: 'Escape' });
+    expect(mockOnClose).not.toHaveBeenCalled();
   });
 });
