@@ -2,7 +2,8 @@ import axios from 'axios';
 import type {
   User, Project, Task, KanbanBoard, GanttTask, CalendarEvent,
   CreateTaskInput, UpdateTaskInput, UserBrief, Reminder,
-  Agent, AgentAction, OrchestratorStatus, GitHubLink
+  Agent, AgentAction, OrchestratorStatus, GitHubLink,
+  AgentMessage, AgentDirective, TaskQueueItem, DirectiveType
 } from '@/types';
 import { useStore } from '@/store';
 
@@ -263,6 +264,50 @@ export const agents = {
 
   getGitHubLinks: async (taskId: number) => {
     const { data } = await api.get<GitHubLink[]>(`/agents/github-links/${taskId}`);
+    return data;
+  },
+
+  // Coordination: Messages
+  getInbox: async (agentId: number, limit = 50) => {
+    const { data } = await api.get<AgentMessage[]>(`/agents/${agentId}/messages/inbox`, {
+      params: { limit },
+    });
+    return data;
+  },
+
+  getOutbox: async (agentId: number, limit = 50) => {
+    const { data } = await api.get<AgentMessage[]>(`/agents/${agentId}/messages/outbox`, {
+      params: { limit },
+    });
+    return data;
+  },
+
+  getThread: async (threadId: string) => {
+    const { data } = await api.get<AgentMessage[]>(`/agents/messages/threads/${threadId}`);
+    return data;
+  },
+
+  // Coordination: Directives
+  sendDirective: async (agentId: number, directiveType: DirectiveType, payload?: Record<string, unknown>) => {
+    const { data } = await api.post<AgentDirective>(`/agents/${agentId}/directives`, {
+      directive_type: directiveType,
+      payload,
+    });
+    return data;
+  },
+
+  getDirectives: async (agentId: number, pendingOnly = false) => {
+    const { data } = await api.get<AgentDirective[]>(`/agents/${agentId}/directives`, {
+      params: { pending_only: pendingOnly },
+    });
+    return data;
+  },
+
+  // Coordination: Task Queue
+  getTaskQueue: async (projectId?: number, limit = 50) => {
+    const { data } = await api.get<TaskQueueItem[]>('/agents/queue', {
+      params: { project_id: projectId, limit },
+    });
     return data;
   },
 };

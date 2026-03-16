@@ -215,3 +215,48 @@ export interface OrchestratorStatus {
     is_alive: boolean;
   }>;
 }
+
+// ============ Agent Coordination Types ============
+export type MessageStatus = 'pending' | 'read' | 'replied' | 'expired';
+export type DirectiveType = 'pause' | 'resume' | 'cancel' | 'reassign' | 'message';
+
+export interface AgentMessage {
+  id: number;
+  sender_id: number;
+  sender_name?: string;
+  recipient_id: number;
+  recipient_name?: string;
+  thread_id?: string;
+  message_type: string;
+  subject: string;
+  body?: string;
+  status: MessageStatus;
+  in_reply_to?: number;
+  metadata?: Record<string, unknown>;
+  created_at: string;
+  read_at?: string;
+}
+
+export interface AgentDirective {
+  id: number;
+  agent_id: number;
+  directive_type: DirectiveType;
+  payload?: Record<string, unknown>;
+  issued_by?: number;
+  acknowledged: boolean;
+  acknowledged_at?: string;
+  created_at: string;
+}
+
+export interface TaskQueueItem {
+  id: number;
+  title: string;
+  description?: string;
+  status: TaskStatus;
+  priority: TaskPriority;
+  project_id: number;
+  project_name?: string;
+  required_capabilities: string[];
+  estimated_hours?: number;
+  created_at: string;
+}
