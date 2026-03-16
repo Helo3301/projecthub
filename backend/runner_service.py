@@ -30,7 +30,7 @@ MAX_RUNNING = 5
 PROJECTHUB_API = os.environ.get("PROJECTHUB_API", "http://localhost:8000")
 
 # In-memory store: agent_id -> { process, session_id, cwd, started_at }
-_running: dict[int, dict] = {}
+_running = {}  # agent_id -> { process, session_id, cwd, started_at }
 
 
 async def validate_jwt(token: str) -> bool:
@@ -57,6 +57,9 @@ async def websocket_handler(request):
     await ws.prepare(request)
     await send_runner_status(ws)
 
+    # Track which agents this WebSocket owns — clean up on disconnect
+    owned_agents = set()  # type: set
+
     async for msg in ws:
         if msg.type == aiohttp.WSMsgType.TEXT:
             try:
@@ -70,10 +73,12 @@ async def websocket_handler(request):
 
             if msg_type == "spawn":
                 await handle_spawn(ws, agent_id, data)
+                owned_agents.add(agent_id)
             elif msg_type == "prompt":
                 await handle_prompt(ws, agent_id, data)
             elif msg_type == "kill":
                 await handle_kill(ws, agent_id)
+                owned_agents.discard(agent_id)
             elif msg_type == "status":
                 await send_runner_status(ws)
             else:
@@ -81,6 +86,23 @@ async def websocket_handler(request):
                                     "message": f"Unknown: {msg_type}"})
         elif msg.type == aiohttp.WSMsgType.ERROR:
             break
+
+    # WebSocket disconnected — kill orphaned agents
+    for agent_id in owned_agents:
+        if agent_id in _running:
+            info = _running[agent_id]
+            proc = info.get("process")
+            if proc and proc.returncode is None:
+                print(f"[cleanup] Killing orphaned agent {agent_id} (WebSocket disconnected)")
+                try:
+                    os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+                except (ProcessLookupError, OSError):
+                    pass
+                try:
+                    await asyncio.wait_for(proc.wait(), timeout=5)
+                except asyncio.TimeoutError:
+                    proc.kill()
+            del _running[agent_id]
 
     return ws
 
