@@ -322,5 +322,18 @@ class OrchestratorStatus(BaseModel):
     agents: List[AgentBrief] = []
 
 
+# ============ Hook Schemas ============
+class ToolActionHookEvent(BaseModel):
+    """Schema for Claude Code PostToolUse HTTP hook events.
+
+    Claude Code sends the full hook payload; we only require session_id
+    and tool_name. Everything else is optional so the endpoint is
+    resilient to payload changes.
+    """
+    session_id: str
+    tool_name: str
+    tool_input: Optional[Any] = None
+
+
 # Resolve forward references (TaskResponse uses AgentBrief which is defined later)
 TaskResponse.model_rebuild()
