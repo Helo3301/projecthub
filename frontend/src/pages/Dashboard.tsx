@@ -9,6 +9,7 @@ import { TaskModal } from '@/components/TaskModal';
 import { useToast } from '@/components/Toast';
 import { EmptyProjectState } from '@/components/EmptyProjectState';
 import { QueryError } from '@/components/QueryError';
+import { AgentTasksPanel } from '@/components/AgentTasksPanel';
 import type { Task, CalendarEvent, CreateTaskInput, UpdateTaskInput } from '@/types';
 
 interface StatCardProps {
@@ -86,6 +87,10 @@ export function Dashboard() {
   const { toast } = useToast();
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [agentId, setAgentId] = useState(() => {
+    return localStorage.getItem('projecthub_agent_id') || '';
+  });
+  const authToken = localStorage.getItem('token') || '';
 
   const { data: allTasks = [], isPending: isTasksPending, isError: isTasksError, refetch: refetchTasks } = useQuery({
     queryKey: ['tasks', currentProject?.id],
@@ -361,6 +366,33 @@ export function Dashboard() {
         agents={agentsList}
         isSaving={updateMutation.isPending || deleteMutation.isPending}
       />
+
+      {/* Agent Tasks */}
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
+        <div className="flex items-center gap-3 mb-2">
+          <label htmlFor="agent-id-input" className="text-sm font-medium text-gray-700 dark:text-gray-300">
+            Agent Session ID:
+          </label>
+          <input
+            id="agent-id-input"
+            type="text"
+            value={agentId}
+            onChange={(e) => {
+              setAgentId(e.target.value);
+              localStorage.setItem('projecthub_agent_id', e.target.value);
+            }}
+            placeholder="Enter CLAUDE_SESSION_ID"
+            className="px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 w-72"
+          />
+        </div>
+        {agentId ? (
+          <AgentTasksPanel agentId={agentId} authToken={authToken} />
+        ) : (
+          <p className="text-gray-400 dark:text-gray-500 text-sm mt-4">
+            Enter an agent session ID above to view its planned work items.
+          </p>
+        )}
+      </div>
     </div>
   );
 }
