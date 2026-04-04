@@ -156,6 +156,100 @@ class AgentClient:
         except Exception:
             pass
 
+    # ============ Inter-Agent Messaging ============
+
+    def send_message(
+        self,
+        recipient_id: int,
+        subject: str,
+        body: Optional[str] = None,
+        message_type: str = "request",
+        thread_id: Optional[str] = None,
+        in_reply_to: Optional[int] = None,
+        metadata: Optional[dict] = None,
+    ) -> dict:
+        """Send a message to another agent. Returns the created message."""
+        if not self.agent_id:
+            raise RuntimeError("No agent_id set. Register first.")
+        payload: dict = {
+            "recipient_id": recipient_id,
+            "subject": subject,
+            "message_type": message_type,
+        }
+        if body:
+            payload["body"] = body
+        if thread_id:
+            payload["thread_id"] = thread_id
+        if in_reply_to is not None:
+            payload["in_reply_to"] = in_reply_to
+        if metadata:
+            payload["metadata"] = metadata
+        return self._request("POST", f"/{self.agent_id}/messages", payload, use_agent_key=True)
+
+    def get_inbox(self, status: Optional[str] = None, limit: int = 50) -> list[dict]:
+        """Get messages received by this agent. Requires JWT auth."""
+        if not self.agent_id:
+            raise RuntimeError("No agent_id set. Register first.")
+        path = f"/{self.agent_id}/messages/inbox?limit={limit}"
+        if status:
+            path += f"&status={status}"
+        return self._request("GET", path)
+
+    def ack_message(self, message_id: int) -> dict:
+        """Mark a message as read."""
+        if not self.agent_id:
+            raise RuntimeError("No agent_id set. Register first.")
+        return self._request("POST", f"/{self.agent_id}/messages/{message_id}/ack", use_agent_key=True)
+
+    # ============ Task Queue ============
+
+    def claim_task(
+        self,
+        project_id: Optional[int] = None,
+        required_capabilities: Optional[list[str]] = None,
+    ) -> Optional[dict]:
+        """Claim the highest-priority unassigned task. Returns task or None."""
+        if not self.agent_id:
+            raise RuntimeError("No agent_id set. Register first.")
+        payload: dict = {}
+        if project_id:
+            payload["project_id"] = project_id
+        if required_capabilities:
+            payload["required_capabilities"] = required_capabilities
+        try:
+            return self._request("POST", "/queue/claim", payload, use_agent_key=True)
+        except RuntimeError as e:
+            if "204" in str(e):
+                return None
+            raise
+
+    def release_task(self, task_id: int) -> dict:
+        """Release a claimed task back to the queue."""
+        return self._request("POST", f"/queue/release?task_id={task_id}", use_agent_key=True)
+
+    def complete_task(self, task_id: int) -> dict:
+        """Mark a claimed task as complete."""
+        return self._request("POST", f"/queue/complete?task_id={task_id}", use_agent_key=True)
+
+    # ============ Directives ============
+
+    def get_directives(self, pending_only: bool = True) -> list[dict]:
+        """Get directives issued to this agent. Requires JWT auth."""
+        if not self.agent_id:
+            raise RuntimeError("No agent_id set. Register first.")
+        path = f"/{self.agent_id}/directives?pending_only={str(pending_only).lower()}"
+        return self._request("GET", path)
+
+    def ack_directive(self, directive_id: int) -> dict:
+        """Acknowledge a directive."""
+        if not self.agent_id:
+            raise RuntimeError("No agent_id set. Register first.")
+        return self._request("POST", f"/{self.agent_id}/directives/{directive_id}/ack", use_agent_key=True)
+
+    def poll_directives(self) -> list[dict]:
+        """Poll for unacknowledged directives. Convenience wrapper."""
+        return self.get_directives(pending_only=True)
+
 
 if __name__ == "__main__":
     import sys

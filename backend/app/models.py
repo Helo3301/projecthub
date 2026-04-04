@@ -51,6 +51,21 @@ class AgentStatus(enum.Enum):
     OFFLINE = "offline"
 
 
+class MessageStatus(enum.Enum):
+    PENDING = "pending"
+    READ = "read"
+    REPLIED = "replied"
+    EXPIRED = "expired"
+
+
+class DirectiveType(enum.Enum):
+    PAUSE = "pause"
+    RESUME = "resume"
+    CANCEL = "cancel"
+    REASSIGN = "reassign"
+    MESSAGE = "message"
+
+
 class User(Base):
     __tablename__ = "users"
 
@@ -110,6 +125,7 @@ class Task(Base):
 
     # Metadata
     estimated_hours = Column(Integer)
+    correlation_id = Column(String(255), index=True)  # Links to Amphora/Pluteus decisions
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
@@ -182,6 +198,12 @@ class Agent(Base):
     assigned_tasks = relationship("Task", back_populates="agent", foreign_keys="Task.agent_id")
     actions = relationship("AgentAction", back_populates="agent", cascade="all, delete-orphan",
                            order_by="AgentAction.created_at.desc()")
+    sent_messages = relationship("AgentMessage", back_populates="sender",
+                                 foreign_keys="AgentMessage.sender_id", cascade="all, delete-orphan")
+    received_messages = relationship("AgentMessage", back_populates="recipient",
+                                     foreign_keys="AgentMessage.recipient_id", cascade="all, delete-orphan")
+    directives = relationship("AgentDirective", back_populates="agent", cascade="all, delete-orphan",
+                              order_by="AgentDirective.created_at.desc()")
 
 
 class AgentAction(Base):
@@ -222,3 +244,51 @@ class GitHubLink(Base):
     # Relationships
     task = relationship("Task")
     project = relationship("Project")
+
+
+class AgentMessage(Base):
+    """Inter-agent messaging. Agents can send requests/responses to each other."""
+    __tablename__ = "agent_messages"
+    __table_args__ = (
+        Index("ix_agent_messages_recipient_status", "recipient_id", "status"),
+        Index("ix_agent_messages_thread", "thread_id"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    sender_id = Column(Integer, ForeignKey("agents.id", ondelete="CASCADE"), nullable=False)
+    recipient_id = Column(Integer, ForeignKey("agents.id", ondelete="CASCADE"), nullable=False)
+    thread_id = Column(String(255), nullable=True)  # Groups related messages
+    message_type = Column(String(50), nullable=False)  # request, response, broadcast, info
+    subject = Column(String(255), nullable=False)
+    body = Column(Text)
+    status = Column(SQLEnum(MessageStatus), default=MessageStatus.PENDING)
+    in_reply_to = Column(Integer, ForeignKey("agent_messages.id", ondelete="SET NULL"), nullable=True)
+    metadata_json = Column(Text)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    read_at = Column(DateTime(timezone=True), nullable=True)
+
+    # Relationships
+    sender = relationship("Agent", back_populates="sent_messages", foreign_keys=[sender_id])
+    recipient = relationship("Agent", back_populates="received_messages", foreign_keys=[recipient_id])
+    reply_to = relationship("AgentMessage", remote_side=[id])
+
+
+class AgentDirective(Base):
+    """Commands from the dashboard/user to agents."""
+    __tablename__ = "agent_directives"
+    __table_args__ = (
+        Index("ix_agent_directives_agent_acked", "agent_id", "acknowledged"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    agent_id = Column(Integer, ForeignKey("agents.id", ondelete="CASCADE"), nullable=False)
+    directive_type = Column(SQLEnum(DirectiveType), nullable=False)
+    payload = Column(Text)  # JSON — directive-specific data
+    issued_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    acknowledged = Column(Boolean, default=False)
+    acknowledged_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    # Relationships
+    agent = relationship("Agent", back_populates="directives")
+    issuer = relationship("User")

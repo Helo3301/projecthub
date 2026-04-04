@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Kanban, GanttChart, Calendar, FolderOpen,
-  Plus, Settings, Users, ChevronDown, LogOut, Bot
+  Plus, Settings, Users, ChevronDown, LogOut, Bot, Terminal
 } from 'lucide-react';
 import { useStore } from '@/store';
 import type { Project } from '@/types';
@@ -137,6 +137,21 @@ export function Sidebar({ projects, onCreateProject, onNavigate }: SidebarProps)
               >
                 <Bot size={20} aria-hidden="true" />
                 <span>Agents</span>
+              </Link>
+            </li>
+            <li>
+              <Link
+                to="/workbench"
+                onClick={onNavigate}
+                aria-current={location.pathname === '/workbench' ? 'page' : undefined}
+                className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${
+                  location.pathname === '/workbench'
+                    ? 'bg-indigo-600 text-white'
+                    : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                }`}
+              >
+                <Terminal size={20} aria-hidden="true" />
+                <span>Workbench</span>
               </Link>
             </li>
           </ul>

@@ -1,7 +1,7 @@
 from pydantic import BaseModel, EmailStr, Field
 from datetime import datetime
 from typing import Optional, List, Any
-from app.models import TaskStatus, TaskPriority, AgentType, AgentStatus
+from app.models import TaskStatus, TaskPriority, AgentType, AgentStatus, MessageStatus, DirectiveType
 
 
 # ============ User Schemas ============
@@ -84,6 +84,7 @@ class TaskBase(BaseModel):
     start_date: Optional[datetime] = None
     due_date: Optional[datetime] = None
     estimated_hours: Optional[int] = None
+    correlation_id: Optional[str] = None
     parent_id: Optional[int] = None
     position: Optional[int] = 0
 
@@ -112,6 +113,7 @@ class TaskUpdate(BaseModel):
     due_date: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     estimated_hours: Optional[int] = None
+    correlation_id: Optional[str] = None
     parent_id: Optional[int] = None
     position: Optional[int] = None
     assignee_ids: Optional[List[int]] = None
@@ -333,6 +335,80 @@ class ToolActionHookEvent(BaseModel):
     session_id: str
     tool_name: str
     tool_input: Optional[Any] = None
+
+
+# ============ Agent Message Schemas ============
+class AgentMessageCreate(BaseModel):
+    recipient_id: int
+    message_type: str = Field(default="request", max_length=50)  # request, response, broadcast, info
+    subject: str = Field(..., max_length=255)
+    body: Optional[str] = None
+    thread_id: Optional[str] = Field(default=None, max_length=255)
+    in_reply_to: Optional[int] = None
+    metadata: Optional[dict[str, Any]] = None
+
+
+class AgentMessageResponse(BaseModel):
+    id: int
+    sender_id: int
+    sender_name: Optional[str] = None
+    recipient_id: int
+    recipient_name: Optional[str] = None
+    thread_id: Optional[str] = None
+    message_type: str
+    subject: str
+    body: Optional[str] = None
+    status: MessageStatus
+    in_reply_to: Optional[int] = None
+    metadata: Optional[dict[str, Any]] = None
+    created_at: datetime
+    read_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+# ============ Agent Directive Schemas ============
+class AgentDirectiveCreate(BaseModel):
+    directive_type: DirectiveType
+    payload: Optional[dict[str, Any]] = None
+
+
+class AgentDirectiveResponse(BaseModel):
+    id: int
+    agent_id: int
+    directive_type: DirectiveType
+    payload: Optional[dict[str, Any]] = None
+    issued_by: Optional[int] = None
+    acknowledged: bool
+    acknowledged_at: Optional[datetime] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+# ============ Task Queue Schemas ============
+class TaskClaimRequest(BaseModel):
+    required_capabilities: Optional[List[str]] = None
+    project_id: Optional[int] = None
+    priorities: Optional[List[TaskPriority]] = None
+
+
+class TaskQueueItem(BaseModel):
+    id: int
+    title: str
+    description: Optional[str] = None
+    status: TaskStatus
+    priority: TaskPriority
+    project_id: int
+    project_name: Optional[str] = None
+    required_capabilities: List[str] = []
+    estimated_hours: Optional[int] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
 
 
 # Resolve forward references (TaskResponse uses AgentBrief which is defined later)

@@ -15,6 +15,7 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 const GanttPage = lazy(() => import('./pages/GanttPage').then(m => ({ default: m.GanttPage })));
 const CalendarPage = lazy(() => import('./pages/CalendarPage').then(m => ({ default: m.CalendarPage })));
 const AgentDashboard = lazy(() => import('./pages/AgentDashboard'));
+const AgentWorkbench = lazy(() => import('./pages/AgentWorkbench'));
 const Register = lazy(() => import('./pages/Register').then(m => ({ default: m.Register })));
 const ForgotPassword = lazy(() => import('./pages/ForgotPassword').then(m => ({ default: m.ForgotPassword })));
 const ResetPassword = lazy(() => import('./pages/ResetPassword').then(m => ({ default: m.ResetPassword })));
@@ -58,6 +59,7 @@ function AppRoutes() {
             <Route path="/team/add" element={<AddUserPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/agents" element={<AgentDashboard />} />
+            <Route path="/workbench" element={<AgentWorkbench />} />
           </Route>
 
           {/* Fallback */}
