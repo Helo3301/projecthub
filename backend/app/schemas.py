@@ -84,6 +84,7 @@ class TaskBase(BaseModel):
     start_date: Optional[datetime] = None
     due_date: Optional[datetime] = None
     estimated_hours: Optional[int] = None
+    correlation_id: Optional[str] = None
     parent_id: Optional[int] = None
     position: Optional[int] = 0
 
@@ -112,6 +113,7 @@ class TaskUpdate(BaseModel):
     due_date: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     estimated_hours: Optional[int] = None
+    correlation_id: Optional[str] = None
     parent_id: Optional[int] = None
     position: Optional[int] = None
     assignee_ids: Optional[List[int]] = None
@@ -320,6 +322,19 @@ class OrchestratorStatus(BaseModel):
     max_agents: int
     queue_depth: int
     agents: List[AgentBrief] = []
+
+
+# ============ Hook Schemas ============
+class ToolActionHookEvent(BaseModel):
+    """Schema for Claude Code PostToolUse HTTP hook events.
+
+    Claude Code sends the full hook payload; we only require session_id
+    and tool_name. Everything else is optional so the endpoint is
+    resilient to payload changes.
+    """
+    session_id: str
+    tool_name: str
+    tool_input: Optional[Any] = None
 
 
 # ============ Agent Message Schemas ============

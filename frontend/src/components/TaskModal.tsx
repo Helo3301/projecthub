@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { Task, UserBrief, TaskPriority, TaskStatus, CreateTaskInput, UpdateTaskInput, Agent } from '@/types';
 import { tasks as tasksApi } from '@/lib/api';
 import { ColorPicker } from './ColorPicker';
+import PluteusPanel from './PluteusPanel';
 import { ReminderModal } from './ReminderModal';
 
 interface TaskModalProps {
@@ -513,6 +514,16 @@ export function TaskModal({
             </div>
           </div>
         </form>
+
+        {/* Pluteus decisions panel — only shown for existing tasks */}
+        {task && (
+          <div className="px-4">
+            <PluteusPanel
+              correlationId={task.correlation_id}
+              taskTitle={task.title}
+            />
+          </div>
+        )}
 
         {/* Footer */}
         <div className="flex items-center justify-between p-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">

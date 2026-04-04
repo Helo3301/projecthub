@@ -5,3 +5,5 @@ export { GanttChart } from './GanttChart';
 export { CalendarView } from './CalendarView';
 export { TaskModal } from './TaskModal';
 export { Layout } from './Layout';
+export { AgentTaskCard } from './AgentTaskCard';
+export { AgentTasksPanel } from './AgentTasksPanel';
