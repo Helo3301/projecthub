@@ -28,6 +28,8 @@ interface AppState {
   // UI State
   sidebarOpen: boolean;
   toggleSidebar: () => void;
+  darkMode: boolean;
+  toggleDarkMode: () => void;
   currentView: 'dashboard' | 'kanban' | 'gantt' | 'calendar' | 'list';
   setCurrentView: (view: 'dashboard' | 'kanban' | 'gantt' | 'calendar' | 'list') => void;
 }
@@ -41,7 +43,8 @@ export const useStore = create<AppState>()(
       setUser: (user) => set({ user, isAuthenticated: !!user }),
       logout: () => {
         localStorage.removeItem('token');
-        set({ user: null, isAuthenticated: false, projects: [], tasks: [] });
+        document.documentElement.classList.remove('dark');
+        set({ user: null, isAuthenticated: false, projects: [], tasks: [], currentProject: null, darkMode: false, currentView: 'dashboard', sidebarOpen: true });
       },
 
       // Projects
@@ -77,17 +80,25 @@ export const useStore = create<AppState>()(
       // UI State
       sidebarOpen: true,
       toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
+      darkMode: false,
+      toggleDarkMode: () => set((state) => {
+        const newDark = !state.darkMode;
+        document.documentElement.classList.toggle('dark', newDark);
+        return { darkMode: newDark };
+      }),
       currentView: 'dashboard',
       setCurrentView: (view) => set({ currentView: view }),
     }),
     {
       name: 'projecthub-storage',
       partialize: (state) => ({
-        isAuthenticated: state.isAuthenticated,
-        currentProject: state.currentProject,
         sidebarOpen: state.sidebarOpen,
+        darkMode: state.darkMode,
         currentView: state.currentView,
       }),
+      onRehydrateStorage: () => (state) => {
+        document.documentElement.classList.toggle('dark', !!state?.darkMode);
+      },
     }
   )
 );

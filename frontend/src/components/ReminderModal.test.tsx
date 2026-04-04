@@ -267,7 +267,7 @@ describe('ReminderModal', () => {
     );
 
     fireEvent.change(screen.getByTestId('custom-date'), {
-      target: { value: '2024-12-20' },
+      target: { value: '2099-12-20' },
     });
     fireEvent.change(screen.getByTestId('custom-time'), {
       target: { value: '10:00' },
@@ -275,5 +275,85 @@ describe('ReminderModal', () => {
     fireEvent.click(screen.getByTestId('add-reminder-btn'));
 
     expect(mockOnAdd).toHaveBeenCalled();
+  });
+
+  it('prevents adding reminders with past dates', () => {
+    render(
+      <ReminderModal
+        isOpen={true}
+        onClose={mockOnClose}
+        onAdd={mockOnAdd}
+        onDelete={mockOnDelete}
+        task={mockTask}
+        reminders={[]}
+      />
+    );
+
+    fireEvent.change(screen.getByTestId('custom-date'), {
+      target: { value: '2020-01-01' },
+    });
+    fireEvent.change(screen.getByTestId('custom-time'), {
+      target: { value: '10:00' },
+    });
+    fireEvent.click(screen.getByTestId('add-reminder-btn'));
+
+    expect(mockOnAdd).not.toHaveBeenCalled();
+  });
+
+  it('shows date error with role="alert" and links via aria-describedby', () => {
+    render(
+      <ReminderModal
+        isOpen={true}
+        onClose={mockOnClose}
+        onAdd={mockOnAdd}
+        onDelete={mockOnDelete}
+        task={mockTask}
+        reminders={[]}
+      />
+    );
+
+    fireEvent.change(screen.getByTestId('custom-date'), {
+      target: { value: '2020-01-01' },
+    });
+    fireEvent.change(screen.getByTestId('custom-time'), {
+      target: { value: '10:00' },
+    });
+    fireEvent.click(screen.getByTestId('add-reminder-btn'));
+
+    const error = screen.getByRole('alert');
+    expect(error).toHaveTextContent('Reminder must be in the future');
+    const dateInput = screen.getByTestId('custom-date');
+    expect(dateInput).toHaveAttribute('aria-describedby', 'reminder-date-error');
+  });
+
+  it('quick options are grouped with role="group"', () => {
+    render(
+      <ReminderModal
+        isOpen={true}
+        onClose={mockOnClose}
+        onAdd={mockOnAdd}
+        onDelete={mockOnDelete}
+        task={mockTask}
+        reminders={[]}
+      />
+    );
+
+    expect(screen.getByRole('group', { name: /quick reminder options/i })).toBeInTheDocument();
+  });
+
+  it('message input has label association via htmlFor/id', () => {
+    render(
+      <ReminderModal
+        isOpen={true}
+        onClose={mockOnClose}
+        onAdd={mockOnAdd}
+        onDelete={mockOnDelete}
+        task={mockTask}
+        reminders={[]}
+      />
+    );
+
+    const messageInput = screen.getByLabelText('Message (optional)');
+    expect(messageInput).toHaveAttribute('id', 'reminder-message');
   });
 });

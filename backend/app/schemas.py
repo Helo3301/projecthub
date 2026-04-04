@@ -1,7 +1,7 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from datetime import datetime
-from typing import Optional, List
-from app.models import TaskStatus, TaskPriority
+from typing import Optional, List, Any
+from app.models import TaskStatus, TaskPriority, AgentType, AgentStatus, MessageStatus, DirectiveType
 
 
 # ============ User Schemas ============
@@ -89,10 +89,18 @@ class TaskBase(BaseModel):
     position: Optional[int] = 0
 
 
+class SubtaskInput(BaseModel):
+    id: Optional[int] = None  # None for new subtasks
+    title: str
+    completed: bool = False
+
+
 class TaskCreate(TaskBase):
     project_id: int
     assignee_ids: Optional[List[int]] = []
     dependency_ids: Optional[List[int]] = []
+    agent_id: Optional[int] = None
+    subtasks: Optional[List[SubtaskInput]] = None
 
 
 class TaskUpdate(BaseModel):
@@ -110,6 +118,8 @@ class TaskUpdate(BaseModel):
     position: Optional[int] = None
     assignee_ids: Optional[List[int]] = None
     dependency_ids: Optional[List[int]] = None
+    agent_id: Optional[int] = None
+    subtasks: Optional[List[SubtaskInput]] = None
 
 
 class TaskBrief(BaseModel):
@@ -133,6 +143,8 @@ class TaskResponse(TaskBase):
     dependencies: List[TaskBrief] = []
     subtask_count: Optional[int] = 0
     subtask_completed: Optional[int] = 0
+    agent_id: Optional[int] = None
+    agent: Optional["AgentBrief"] = None
 
     class Config:
         from_attributes = True
@@ -203,3 +215,188 @@ class TokenData(BaseModel):
 class LoginRequest(BaseModel):
     username: str
     password: str
+
+
+# ============ Agent Schemas ============
+class AgentRegister(BaseModel):
+    name: str = Field(..., max_length=255)
+    agent_type: AgentType
+    capabilities: List[str] = Field(default=[])
+    session_id: Optional[str] = Field(default=None, max_length=255)
+    metadata: Optional[dict[str, Any]] = None
+
+
+class AgentHeartbeat(BaseModel):
+    status: Optional[AgentStatus] = None
+    current_task_id: Optional[int] = None
+    message: Optional[str] = None
+
+
+class AgentResponse(BaseModel):
+    id: int
+    name: str
+    agent_type: AgentType
+    status: AgentStatus
+    capabilities: List[str] = []
+    session_id: Optional[str] = None
+    last_heartbeat: Optional[datetime] = None
+    current_task_id: Optional[int] = None
+    current_task: Optional[TaskBrief] = None
+    is_alive: bool = True
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class AgentBrief(BaseModel):
+    id: int
+    name: str
+    agent_type: AgentType
+    status: AgentStatus
+    is_alive: bool = True
+
+    class Config:
+        from_attributes = True
+
+
+class AgentRegistered(BaseModel):
+    id: int
+    name: str
+    api_key: str
+
+
+class AgentActionCreate(BaseModel):
+    action_type: str = Field(..., max_length=50)
+    summary: str = Field(..., max_length=500)
+    detail: Optional[str] = None
+    task_id: Optional[int] = None
+    metadata: Optional[dict[str, Any]] = None
+
+
+class AgentActionResponse(BaseModel):
+    id: int
+    agent_id: int
+    agent_name: Optional[str] = None
+    agent_type: Optional[AgentType] = None
+    action_type: str
+    summary: str
+    detail: Optional[str] = None
+    task_id: Optional[int] = None
+    metadata: Optional[dict[str, Any]] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class GitHubLinkCreate(BaseModel):
+    task_id: Optional[int] = None
+    project_id: Optional[int] = None
+    github_repo: str
+    github_type: str
+    github_id: str
+    github_url: str
+    title: Optional[str] = None
+    state: Optional[str] = "open"
+
+
+class GitHubLinkResponse(BaseModel):
+    id: int
+    task_id: Optional[int] = None
+    project_id: Optional[int] = None
+    github_repo: str
+    github_type: str
+    github_id: str
+    github_url: str
+    title: Optional[str] = None
+    state: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class OrchestratorStatus(BaseModel):
+    active_agents: int
+    max_agents: int
+    queue_depth: int
+    agents: List[AgentBrief] = []
+
+
+# ============ Agent Message Schemas ============
+class AgentMessageCreate(BaseModel):
+    recipient_id: int
+    message_type: str = Field(default="request", max_length=50)  # request, response, broadcast, info
+    subject: str = Field(..., max_length=255)
+    body: Optional[str] = None
+    thread_id: Optional[str] = Field(default=None, max_length=255)
+    in_reply_to: Optional[int] = None
+    metadata: Optional[dict[str, Any]] = None
+
+
+class AgentMessageResponse(BaseModel):
+    id: int
+    sender_id: int
+    sender_name: Optional[str] = None
+    recipient_id: int
+    recipient_name: Optional[str] = None
+    thread_id: Optional[str] = None
+    message_type: str
+    subject: str
+    body: Optional[str] = None
+    status: MessageStatus
+    in_reply_to: Optional[int] = None
+    metadata: Optional[dict[str, Any]] = None
+    created_at: datetime
+    read_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+# ============ Agent Directive Schemas ============
+class AgentDirectiveCreate(BaseModel):
+    directive_type: DirectiveType
+    payload: Optional[dict[str, Any]] = None
+
+
+class AgentDirectiveResponse(BaseModel):
+    id: int
+    agent_id: int
+    directive_type: DirectiveType
+    payload: Optional[dict[str, Any]] = None
+    issued_by: Optional[int] = None
+    acknowledged: bool
+    acknowledged_at: Optional[datetime] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+# ============ Task Queue Schemas ============
+class TaskClaimRequest(BaseModel):
+    required_capabilities: Optional[List[str]] = None
+    project_id: Optional[int] = None
+    priorities: Optional[List[TaskPriority]] = None
+
+
+class TaskQueueItem(BaseModel):
+    id: int
+    title: str
+    description: Optional[str] = None
+    status: TaskStatus
+    priority: TaskPriority
+    project_id: int
+    project_name: Optional[str] = None
+    required_capabilities: List[str] = []
+    estimated_hours: Optional[int] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+# Resolve forward references (TaskResponse uses AgentBrief which is defined later)
+TaskResponse.model_rebuild()

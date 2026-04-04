@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useMutation } from '@tanstack/react-query';
 import { Eye, EyeOff, Loader2 } from 'lucide-react';
+import axios from 'axios';
 import { auth } from '@/lib/api';
 import { useStore } from '@/store';
 
@@ -14,37 +15,45 @@ export function Login() {
   const [error, setError] = useState('');
 
   const loginMutation = useMutation({
-    mutationFn: () => auth.login(username, password),
-    onSuccess: async () => {
-      const user = await auth.me();
+    mutationFn: async (credentials: { username: string; password: string }) => {
+      await auth.login(credentials.username, credentials.password);
+      try {
+        return await auth.me();
+      } catch (err) {
+        // Login succeeded but me() failed — clean up the stale token
+        localStorage.removeItem('token');
+        throw err;
+      }
+    },
+    onSuccess: (user) => {
       setUser(user);
       navigate('/');
     },
-    onError: (err: any) => {
-      setError(err.response?.data?.detail || 'Invalid username or password');
+    onError: (err: Error) => {
+      setError(axios.isAxiosError(err) && err.response?.data?.detail ? err.response.data.detail : 'Invalid username or password');
     },
   });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    loginMutation.mutate();
+    loginMutation.mutate({ username, password });
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100" data-testid="login-page">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-8">
+    <div className="min-h-screen flex items-center justify-center bg-gray-100 dark:bg-gray-900" data-testid="login-page">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md p-8">
         {/* Logo */}
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold">
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">
             Project<span className="text-primary-500">Hub</span>
           </h1>
-          <p className="text-gray-500 mt-2">Sign in to your account</p>
+          <p className="text-gray-500 dark:text-gray-400 mt-2">Sign in to your account</p>
         </div>
 
         {/* Error */}
         {error && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
+          <div role="alert" className="mb-4 p-3 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 rounded-lg text-sm">
             {error}
           </div>
         )}
@@ -52,7 +61,7 @@ export function Login() {
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="username" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Username
             </label>
             <input
@@ -60,15 +69,16 @@ export function Login() {
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
               placeholder="Enter your username"
               required
+              autoComplete="username"
               data-testid="username-input"
             />
           </div>
 
           <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="password" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Password
             </label>
             <div className="relative">
@@ -77,17 +87,19 @@ export function Login() {
                 type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-4 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                className="w-full px-4 py-2 pr-10 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                 placeholder="Enter your password"
                 required
+                autoComplete="current-password"
                 data-testid="password-input"
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
               >
-                {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                {showPassword ? <EyeOff size={20} aria-hidden="true" /> : <Eye size={20} aria-hidden="true" />}
               </button>
             </div>
             <div className="flex justify-end">
@@ -118,7 +130,7 @@ export function Login() {
         </form>
 
         {/* Register Link */}
-        <p className="mt-6 text-center text-gray-500">
+        <p className="mt-6 text-center text-gray-500 dark:text-gray-400">
           Don't have an account?{' '}
           <Link to="/register" className="text-primary-500 hover:text-primary-600 font-medium">
             Sign up

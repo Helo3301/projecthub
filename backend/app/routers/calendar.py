@@ -1,5 +1,5 @@
 from typing import List, Optional
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import and_, or_
@@ -26,7 +26,10 @@ def get_calendar_tasks(
     query = db.query(Task).options(
         joinedload(Task.assignees),
         joinedload(Task.project)
-    ).join(Project).filter(Project.owner_id == current_user.id)
+    ).join(Project).filter(
+        Project.owner_id == current_user.id,
+        Task.parent_id == None,
+    )
 
     if project_id:
         query = query.filter(Task.project_id == project_id)
@@ -84,6 +87,7 @@ def get_upcoming_deadlines(
         joinedload(Task.project)
     ).join(Project).filter(
         Project.owner_id == current_user.id,
+        Task.parent_id == None,
         Task.due_date >= now,
         Task.due_date <= end_date,
         Task.status != "done"
@@ -98,6 +102,3 @@ def get_upcoming_deadlines(
         "project_color": task.project.color,
         "days_until": (task.due_date.date() - now.date()).days,
     } for task in tasks]
-
-
-from datetime import timedelta

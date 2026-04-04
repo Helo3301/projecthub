@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Kanban, GanttChart, Calendar, FolderOpen,
-  Plus, Settings, Users, ChevronDown, LogOut
+  Plus, Settings, Users, ChevronDown, LogOut, Bot, Terminal
 } from 'lucide-react';
 import { useStore } from '@/store';
 import type { Project } from '@/types';
@@ -22,12 +22,13 @@ interface SidebarProps {
 
 export function Sidebar({ projects, onCreateProject, onNavigate }: SidebarProps) {
   const location = useLocation();
+  const navigate = useNavigate();
   const { user, logout, currentProject, setCurrentProject } = useStore();
   const [projectsExpanded, setProjectsExpanded] = useState(true);
 
   const handleLogout = () => {
     logout();
-    window.location.href = '/login';
+    navigate('/login');
   };
 
   return (
@@ -52,13 +53,14 @@ export function Sidebar({ projects, onCreateProject, onNavigate }: SidebarProps)
                 <Link
                   to={item.path}
                   onClick={onNavigate}
+                  aria-current={isActive ? 'page' : undefined}
                   className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${
                     isActive
                       ? 'bg-indigo-600 text-white'
                       : 'text-gray-300 hover:bg-gray-800 hover:text-white'
                   }`}
                 >
-                  <item.icon size={20} />
+                  <item.icon size={20} aria-hidden="true" />
                   <span>{item.label}</span>
                 </Link>
               </li>
@@ -70,11 +72,14 @@ export function Sidebar({ projects, onCreateProject, onNavigate }: SidebarProps)
         <div className="mt-6">
           <button
             onClick={() => setProjectsExpanded(!projectsExpanded)}
+            aria-expanded={projectsExpanded}
+            aria-label="Toggle projects section"
             className="w-full flex items-center justify-between px-4 mb-2 text-xs uppercase text-gray-500 tracking-wider hover:text-gray-300"
           >
             <span>Projects</span>
             <ChevronDown
               size={16}
+              aria-hidden="true"
               className={`transition-transform ${projectsExpanded ? '' : '-rotate-90'}`}
             />
           </button>
@@ -87,6 +92,7 @@ export function Sidebar({ projects, onCreateProject, onNavigate }: SidebarProps)
                       setCurrentProject(project);
                       onNavigate?.();
                     }}
+                    aria-pressed={currentProject?.id === project.id}
                     className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors text-left ${
                       currentProject?.id === project.id
                         ? 'bg-gray-800 text-white'
@@ -97,7 +103,7 @@ export function Sidebar({ projects, onCreateProject, onNavigate }: SidebarProps)
                       className="w-3 h-3 rounded flex-shrink-0"
                       style={{ backgroundColor: project.color }}
                     />
-                    <span className="truncate">{project.name}</span>
+                    <span className="truncate" title={project.name}>{project.name}</span>
                   </button>
                 </li>
               ))}
@@ -106,12 +112,49 @@ export function Sidebar({ projects, onCreateProject, onNavigate }: SidebarProps)
                   onClick={onCreateProject}
                   className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-gray-400 hover:bg-gray-800 hover:text-white transition-colors"
                 >
-                  <Plus size={20} />
+                  <Plus size={20} aria-hidden="true" />
                   <span>New Project</span>
                 </button>
               </li>
             </ul>
           )}
+        </div>
+
+        {/* Agents */}
+        <div className="mt-6">
+          <div className="px-4 mb-2 text-xs uppercase text-gray-500 tracking-wider">AI</div>
+          <ul className="space-y-1 px-2">
+            <li>
+              <Link
+                to="/agents"
+                onClick={onNavigate}
+                aria-current={location.pathname === '/agents' ? 'page' : undefined}
+                className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${
+                  location.pathname === '/agents'
+                    ? 'bg-indigo-600 text-white'
+                    : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                }`}
+              >
+                <Bot size={20} aria-hidden="true" />
+                <span>Agents</span>
+              </Link>
+            </li>
+            <li>
+              <Link
+                to="/workbench"
+                onClick={onNavigate}
+                aria-current={location.pathname === '/workbench' ? 'page' : undefined}
+                className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${
+                  location.pathname === '/workbench'
+                    ? 'bg-indigo-600 text-white'
+                    : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                }`}
+              >
+                <Terminal size={20} aria-hidden="true" />
+                <span>Workbench</span>
+              </Link>
+            </li>
+          </ul>
         </div>
 
         {/* Settings */}
@@ -122,9 +165,14 @@ export function Sidebar({ projects, onCreateProject, onNavigate }: SidebarProps)
               <Link
                 to="/team"
                 onClick={onNavigate}
-                className="flex items-center gap-3 px-3 py-2 rounded-lg text-gray-300 hover:bg-gray-800 hover:text-white transition-colors"
+                aria-current={location.pathname === '/team' ? 'page' : undefined}
+                className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${
+                  location.pathname === '/team'
+                    ? 'bg-indigo-600 text-white'
+                    : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                }`}
               >
-                <Users size={20} />
+                <Users size={20} aria-hidden="true" />
                 <span>Team</span>
               </Link>
             </li>
@@ -132,9 +180,14 @@ export function Sidebar({ projects, onCreateProject, onNavigate }: SidebarProps)
               <Link
                 to="/settings"
                 onClick={onNavigate}
-                className="flex items-center gap-3 px-3 py-2 rounded-lg text-gray-300 hover:bg-gray-800 hover:text-white transition-colors"
+                aria-current={location.pathname === '/settings' ? 'page' : undefined}
+                className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${
+                  location.pathname === '/settings'
+                    ? 'bg-indigo-600 text-white'
+                    : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                }`}
               >
-                <Settings size={20} />
+                <Settings size={20} aria-hidden="true" />
                 <span>Settings</span>
               </Link>
             </li>
@@ -146,21 +199,23 @@ export function Sidebar({ projects, onCreateProject, onNavigate }: SidebarProps)
       <div className="p-4 border-t border-gray-700">
         <div className="flex items-center gap-3">
           <div
+            role="img"
+            aria-label={user?.full_name || user?.username || 'User avatar'}
             className="w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold"
             style={{ backgroundColor: user?.avatar_color || '#4F46E5' }}
           >
             {user?.username?.slice(0, 2).toUpperCase() || 'U'}
           </div>
           <div className="flex-1 min-w-0">
-            <div className="font-medium truncate">{user?.full_name || user?.username}</div>
-            <div className="text-sm text-gray-400 truncate">{user?.email}</div>
+            <div className="font-medium truncate" title={user?.full_name || user?.username}>{user?.full_name || user?.username}</div>
+            <div className="text-sm text-gray-400 truncate" title={user?.email}>{user?.email}</div>
           </div>
           <button
             onClick={handleLogout}
             className="p-2 text-gray-400 hover:text-white transition-colors"
-            title="Logout"
+            aria-label="Logout"
           >
-            <LogOut size={20} />
+            <LogOut size={20} aria-hidden="true" />
           </button>
         </div>
       </div>

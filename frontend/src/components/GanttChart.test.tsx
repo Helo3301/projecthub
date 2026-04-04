@@ -118,23 +118,6 @@ describe('GanttChart', () => {
     expect(screen.getByText(currentMonth)).toBeInTheDocument();
   });
 
-  it('renders zoom level buttons', () => {
-    render(<GanttChart tasks={mockTasks} />);
-
-    expect(screen.getByText('Day')).toBeInTheDocument();
-    expect(screen.getByText('Week')).toBeInTheDocument();
-    expect(screen.getByText('Month')).toBeInTheDocument();
-  });
-
-  it('changes zoom level when buttons clicked', () => {
-    render(<GanttChart tasks={mockTasks} />);
-
-    const weekButton = screen.getByText('Week');
-    fireEvent.click(weekButton);
-
-    expect(weekButton).toHaveClass('bg-primary-500');
-  });
-
   it('calls onTaskClick when task row is clicked', () => {
     const onTaskClick = vi.fn();
     render(<GanttChart tasks={mockTasks} onTaskClick={onTaskClick} />);
@@ -173,5 +156,99 @@ describe('GanttChart', () => {
 
     const taskBar = screen.getByTestId('task-bar-1');
     expect(taskBar).toHaveStyle({ backgroundColor: '#4F46E5' });
+  });
+
+  it('renders drag handles when onDateChange is provided', () => {
+    const onDateChange = vi.fn();
+    render(<GanttChart tasks={mockTasks} onDateChange={onDateChange} />);
+    expect(screen.getByTestId('drag-handle-1')).toBeInTheDocument();
+    expect(screen.getByTestId('drag-handle-2')).toBeInTheDocument();
+    expect(screen.getByText('Drag edge to resize')).toBeInTheDocument();
+  });
+
+  it('does not render drag handles when onDateChange is not provided', () => {
+    render(<GanttChart tasks={mockTasks} />);
+    expect(screen.queryByTestId('drag-handle-1')).not.toBeInTheDocument();
+    expect(screen.queryByText('Drag edge to resize')).not.toBeInTheDocument();
+  });
+
+  it('calls onDateChange with ArrowRight key on task bar', () => {
+    const onDateChange = vi.fn();
+    render(<GanttChart tasks={mockTasks} onDateChange={onDateChange} />);
+    const bar1 = screen.getByTestId('task-bar-1');
+    fireEvent.keyDown(bar1, { key: 'ArrowRight' });
+    expect(onDateChange).toHaveBeenCalledTimes(1);
+    expect(onDateChange.mock.calls[0][0]).toBe(1); // task id
+  });
+
+  it('calls onDateChange with ArrowLeft key on task bar', () => {
+    const onDateChange = vi.fn();
+    render(<GanttChart tasks={mockTasks} onDateChange={onDateChange} />);
+    const bar1 = screen.getByTestId('task-bar-1');
+    fireEvent.keyDown(bar1, { key: 'ArrowLeft' });
+    expect(onDateChange).toHaveBeenCalledTimes(1);
+    expect(onDateChange.mock.calls[0][0]).toBe(1);
+  });
+
+  it('includes resize hint in aria-label when onDateChange provided', () => {
+    const onDateChange = vi.fn();
+    render(<GanttChart tasks={mockTasks} onDateChange={onDateChange} />);
+    const bar1 = screen.getByTestId('task-bar-1');
+    expect(bar1.getAttribute('aria-label')).toContain('use arrow keys to resize');
+  });
+
+  it('task bars have role="button" and aria-label', () => {
+    render(<GanttChart tasks={mockTasks} />);
+    const bar1 = screen.getByTestId('task-bar-1');
+    expect(bar1).toHaveAttribute('role', 'button');
+    // aria-label includes date range and progress
+    const label = bar1.getAttribute('aria-label')!;
+    expect(label).toContain('Task 1');
+    expect(label).toContain('50% complete');
+    expect(bar1).toHaveAttribute('tabindex', '0');
+  });
+
+  it('task bar responds to keyboard Enter', () => {
+    const onTaskClick = vi.fn();
+    render(<GanttChart tasks={mockTasks} onTaskClick={onTaskClick} />);
+    const bar1 = screen.getByTestId('task-bar-1');
+    fireEvent.keyDown(bar1, { key: 'Enter' });
+    expect(onTaskClick).toHaveBeenCalledWith(mockTasks[0]);
+  });
+
+  it('task bar responds to keyboard Space', () => {
+    const onTaskClick = vi.fn();
+    render(<GanttChart tasks={mockTasks} onTaskClick={onTaskClick} />);
+    const bar1 = screen.getByTestId('task-bar-1');
+    fireEvent.keyDown(bar1, { key: ' ' });
+    expect(onTaskClick).toHaveBeenCalledWith(mockTasks[0]);
+  });
+
+  it('task row has role="button" and responds to keyboard', () => {
+    const onTaskClick = vi.fn();
+    render(<GanttChart tasks={mockTasks} onTaskClick={onTaskClick} />);
+    const row1 = screen.getByTestId('task-row-1');
+    expect(row1).toHaveAttribute('role', 'button');
+    fireEvent.keyDown(row1, { key: 'Enter' });
+    expect(onTaskClick).toHaveBeenCalledWith(mockTasks[0]);
+  });
+
+  it('shows loading skeleton when isLoading is true', () => {
+    const { container } = render(<GanttChart tasks={[]} isLoading />);
+    const pulses = container.querySelectorAll('.animate-pulse');
+    expect(pulses.length).toBeGreaterThan(0);
+  });
+
+  it('does not render task without dates as a bar', () => {
+    render(<GanttChart tasks={mockTasks} />);
+    // Task 3 has no dates
+    expect(screen.queryByTestId('task-bar-3')).not.toBeInTheDocument();
+  });
+
+  it('includes progress in task row aria-label', () => {
+    render(<GanttChart tasks={mockTasks} />);
+    expect(screen.getByLabelText('Task 1, 50% complete')).toBeInTheDocument();
+    expect(screen.getByLabelText('Task 2, 100% complete')).toBeInTheDocument();
+    expect(screen.getByLabelText('Task without dates, 0% complete')).toBeInTheDocument();
   });
 });

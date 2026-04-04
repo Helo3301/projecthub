@@ -1,8 +1,11 @@
 import axios from 'axios';
 import type {
   User, Project, Task, KanbanBoard, GanttTask, CalendarEvent,
-  CreateTaskInput, UpdateTaskInput, UserBrief, Reminder
+  CreateTaskInput, UpdateTaskInput, UserBrief, Reminder,
+  Agent, AgentAction, OrchestratorStatus, GitHubLink,
+  AgentMessage, AgentDirective, TaskQueueItem, DirectiveType
 } from '@/types';
+import { useStore } from '@/store';
 
 // Use relative URL so nginx can proxy to backend
 const api = axios.create({
@@ -25,9 +28,12 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
-      localStorage.removeItem('token');
-      window.location.href = '/login';
+    const publicApiPaths = ['/auth/login', '/auth/register', '/auth/forgot-password', '/auth/reset-password', '/auth/me'];
+    if (error.response?.status === 401 && !publicApiPaths.some(p => error.config?.url?.startsWith(p))) {
+      useStore.getState().logout();
+      if (window.location.pathname !== '/login') {
+        window.location.href = '/login';
+      }
     }
     return Promise.reject(error);
   }
@@ -63,7 +69,8 @@ export const auth = {
   },
 
   forgotPassword: async (emailOrUsername: string) => {
-    const { data } = await api.post<{ message: string; reset_token: string }>(
+    // NOTE: reset_token in response is a dev convenience — production should deliver via email only
+    const { data } = await api.post<{ message: string; reset_token?: string }>(
       '/auth/forgot-password',
       { email_or_username: emailOrUsername }
     );
@@ -110,9 +117,9 @@ export const projects = {
 
 // ============ Tasks ============
 export const tasks = {
-  list: async (projectId?: number, status?: string) => {
+  list: async (projectId?: number, status?: string, includeSubtasks = false) => {
     const { data } = await api.get<Task[]>('/tasks/', {
-      params: { project_id: projectId, status },
+      params: { project_id: projectId, status, include_subtasks: includeSubtasks },
     });
     return data;
   },
@@ -235,6 +242,87 @@ export const pluteus = {
 
   search: async (query: string) => {
     const { data } = await api.get('/integrations/pluteus/search', { params: { q: query } });
+// ============ Agents ============
+export const agents = {
+  list: async () => {
+    const { data } = await api.get<Agent[]>('/agents/');
+    return data;
+  },
+
+  get: async (id: number) => {
+    const { data } = await api.get<Agent>(`/agents/${id}`);
+    return data;
+  },
+
+  getActions: async (id: number, limit = 50) => {
+    const { data } = await api.get<AgentAction[]>(`/agents/${id}/actions`, {
+      params: { limit },
+    });
+    return data;
+  },
+
+  getGlobalFeed: async (limit = 100) => {
+    const { data } = await api.get<AgentAction[]>('/agents/actions/feed', {
+      params: { limit },
+    });
+    return data;
+  },
+
+  delete: async (id: number) => {
+    await api.delete(`/agents/${id}`);
+  },
+
+  orchestratorStatus: async () => {
+    const { data } = await api.get<OrchestratorStatus>('/agents/orchestrator/status');
+    return data;
+  },
+
+  getGitHubLinks: async (taskId: number) => {
+    const { data } = await api.get<GitHubLink[]>(`/agents/github-links/${taskId}`);
+    return data;
+  },
+
+  // Coordination: Messages
+  getInbox: async (agentId: number, limit = 50) => {
+    const { data } = await api.get<AgentMessage[]>(`/agents/${agentId}/messages/inbox`, {
+      params: { limit },
+    });
+    return data;
+  },
+
+  getOutbox: async (agentId: number, limit = 50) => {
+    const { data } = await api.get<AgentMessage[]>(`/agents/${agentId}/messages/outbox`, {
+      params: { limit },
+    });
+    return data;
+  },
+
+  getThread: async (threadId: string) => {
+    const { data } = await api.get<AgentMessage[]>(`/agents/messages/threads/${threadId}`);
+    return data;
+  },
+
+  // Coordination: Directives
+  sendDirective: async (agentId: number, directiveType: DirectiveType, payload?: Record<string, unknown>) => {
+    const { data } = await api.post<AgentDirective>(`/agents/${agentId}/directives`, {
+      directive_type: directiveType,
+      payload,
+    });
+    return data;
+  },
+
+  getDirectives: async (agentId: number, pendingOnly = false) => {
+    const { data } = await api.get<AgentDirective[]>(`/agents/${agentId}/directives`, {
+      params: { pending_only: pendingOnly },
+    });
+    return data;
+  },
+
+  // Coordination: Task Queue
+  getTaskQueue: async (projectId?: number, limit = 50) => {
+    const { data } = await api.get<TaskQueueItem[]>('/agents/queue', {
+      params: { project_id: projectId, limit },
+    });
     return data;
   },
 };
