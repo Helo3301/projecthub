@@ -84,6 +84,7 @@ class TaskBase(BaseModel):
     start_date: Optional[datetime] = None
     due_date: Optional[datetime] = None
     estimated_hours: Optional[int] = None
+    correlation_id: Optional[str] = None
     parent_id: Optional[int] = None
     position: Optional[int] = 0
 
@@ -104,6 +105,7 @@ class TaskUpdate(BaseModel):
     due_date: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     estimated_hours: Optional[int] = None
+    correlation_id: Optional[str] = None
     parent_id: Optional[int] = None
     position: Optional[int] = None
     assignee_ids: Optional[List[int]] = None

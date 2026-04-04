@@ -3,6 +3,7 @@ import { X, Plus, Trash2, Calendar, Clock, Users } from 'lucide-react';
 import { format } from 'date-fns';
 import type { Task, UserBrief, TaskPriority, TaskStatus, CreateTaskInput, UpdateTaskInput } from '@/types';
 import { ColorPicker } from './ColorPicker';
+import PluteusPanel from './PluteusPanel';
 
 interface TaskModalProps {
   isOpen: boolean;
@@ -363,6 +364,16 @@ export function TaskModal({
             </div>
           </div>
         </form>
+
+        {/* Pluteus decisions panel — only shown for existing tasks */}
+        {task && (
+          <div className="px-4">
+            <PluteusPanel
+              correlationId={task.correlation_id}
+              taskTitle={task.title}
+            />
+          </div>
+        )}
 
         {/* Footer */}
         <div className="flex items-center justify-between p-4 border-t border-gray-200 bg-gray-50">

@@ -220,4 +220,35 @@ export const calendar = {
   },
 };
 
+// ============ Pluteus Integration ============
+export const pluteus = {
+  status: async () => {
+    const { data } = await api.get('/integrations/pluteus/status');
+    return data as { configured: boolean; reachable: boolean; url?: string };
+  },
+
+  decisions: async (correlationId?: string) => {
+    const params = correlationId ? { correlation_id: correlationId } : {};
+    const { data } = await api.get('/integrations/pluteus/decisions', { params });
+    return data as PluteusDecision[];
+  },
+
+  search: async (query: string) => {
+    const { data } = await api.get('/integrations/pluteus/search', { params: { q: query } });
+    return data;
+  },
+};
+
+export interface PluteusDecision {
+  ID: number;
+  AmphoraNodeID: string;
+  Title: string;
+  Question: string;
+  ChosenOption: string;
+  Tier: string;
+  Confidence: string;
+  URL: string;
+  UpdatedAt: string;
+}
+
 export default api;

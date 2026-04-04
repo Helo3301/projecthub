@@ -64,6 +64,7 @@ def get_tasks(
     project_id: Optional[int] = None,
     status: Optional[TaskStatus] = None,
     priority: Optional[TaskPriority] = None,
+    correlation_id: Optional[str] = Query(None, description="Filter by correlation ID"),
     parent_id: Optional[int] = Query(None, description="Filter by parent task (null for top-level)"),
     include_subtasks: bool = True,
     db: Session = Depends(get_db),
@@ -81,6 +82,8 @@ def get_tasks(
         query = query.filter(Task.status == status)
     if priority:
         query = query.filter(Task.priority == priority)
+    if correlation_id:
+        query = query.filter(Task.correlation_id == correlation_id)
     if parent_id is not None:
         query = query.filter(Task.parent_id == parent_id)
     elif not include_subtasks:

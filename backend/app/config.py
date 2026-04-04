@@ -15,6 +15,10 @@ class Settings(BaseSettings):
     app_name: str = "ProjectHub"
     debug: bool = True
 
+    # Pluteus integration
+    pluteus_url: str = ""
+    pluteus_api_token: str = ""
+
     class Config:
         env_file = ".env"
 

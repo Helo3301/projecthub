@@ -49,6 +49,7 @@ export interface Task {
   due_date?: string;
   completed_at?: string;
   estimated_hours?: number;
+  correlation_id?: string;
   parent_id?: number;
   position: number;
   project_id: number;
@@ -120,6 +121,7 @@ export interface CreateTaskInput {
   start_date?: string;
   due_date?: string;
   estimated_hours?: number;
+  correlation_id?: string;
   parent_id?: number;
   assignee_ids?: number[];
   dependency_ids?: number[];
@@ -135,6 +137,7 @@ export interface UpdateTaskInput {
   due_date?: string;
   completed_at?: string;
   estimated_hours?: number;
+  correlation_id?: string;
   parent_id?: number;
   position?: number;
   assignee_ids?: number[];
