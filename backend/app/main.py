@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text, inspect
 from app.database import engine, Base
-from app.routers import auth, projects, tasks, users, calendar, integrations, agents, coordination, runner, agent_tasks
+from app.routers import auth, projects, tasks, users, calendar, integrations, agents, coordination, runner, agent_tasks, hooks
 from app.config import get_settings
 
 settings = get_settings()
@@ -40,7 +40,12 @@ app.include_router(projects.router, prefix="/api")
 app.include_router(tasks.router, prefix="/api")
 app.include_router(users.router, prefix="/api")
 app.include_router(calendar.router, prefix="/api")
-from app.routers import auth, projects, tasks, users, calendar, integrations, agents, coordination, runner, agent_tasks
+app.include_router(integrations.router, prefix="/api")
+app.include_router(coordination.router, prefix="/api")
+app.include_router(runner.router, prefix="/api")
+app.include_router(agents.router, prefix="/api")
+app.include_router(agent_tasks.router, prefix="/api")
+app.include_router(hooks.router, prefix="/api")
 
 
 @app.get("/")
