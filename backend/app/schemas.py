@@ -494,3 +494,29 @@ class BriefDiffResponse(BaseModel):
     brief_id: int
     sentence_diffs: list[SentenceDiff]
     total_edit_distance: int
+
+
+# ============ Aletheia wp-10: Unreliable Sources ============
+
+class UnreliableSourceOut(BaseModel):
+    node_id: str
+    cumulative_decrement: float
+    edit_count: int
+    content_preview: str
+
+    class Config:
+        from_attributes = True
+
+
+class RetireRequest(BaseModel):
+    approved_by: str = Field(..., description="Must be 'helo' — wp-10 invariant")
+
+
+class RetireResponse(BaseModel):
+    retired: bool
+    node_id: Optional[str] = None
+    tier: Optional[str] = None
+    content_preview: Optional[str] = None
+    reason: Optional[str] = None
+    retired_at: Optional[str] = None
+    approved_by: Optional[str] = None

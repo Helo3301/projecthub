@@ -367,3 +367,29 @@ class BriefEdit(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     brief = relationship("Brief", back_populates="edits")
+
+
+class BriefBackpropEntry(Base):
+    """Aletheia wp-10: per-node decrement log, one row per approve event.
+
+    Feeds the /api/briefs/unreliable-sources aggregation. Separate from
+    BriefEdit (which is per-sentence) because one BriefEdit can cite
+    multiple nodes, each of which gets its own decrement record.
+    """
+    __tablename__ = "brief_backprop_entries"
+    __table_args__ = (
+        Index("ix_backprop_node_applied", "node_id", "applied_at"),
+        Index("ix_backprop_brief", "brief_id"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    brief_id = Column(Integer, ForeignKey("briefs.id", ondelete="CASCADE"), nullable=False)
+    node_id = Column(String(64), nullable=False)  # Amphora node UUID
+    old_corroboration = Column(String(16), nullable=False)
+    new_corroboration = Column(String(16), nullable=False)
+    delta = Column(String(16), nullable=False)
+    at_floor = Column(Boolean, nullable=False, default=False)
+    edit_count = Column(Integer, nullable=False, default=1)
+    applied_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    brief = relationship("Brief")
