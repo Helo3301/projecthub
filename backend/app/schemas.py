@@ -408,3 +408,89 @@ class ToolActionHookEvent(BaseModel):
 
 # Resolve forward references (TaskResponse uses AgentBrief which is defined later)
 TaskResponse.model_rebuild()
+
+
+# ============ Aletheia wp-9: Brief Review Queue ============
+
+from app.models import BriefStatus
+
+
+class BriefCreate(BaseModel):
+    """Payload from aletheia-brief (wp-8) when landing a new draft."""
+    reader: str = Field(..., description="Target reader: 'rowen' or 'helo'")
+    project: str
+    date_range_start: datetime
+    date_range_end: datetime
+    markdown: str
+    citations: dict[str, Any] = Field(default_factory=dict)
+    ungrounded_flags: list[dict[str, Any]] = Field(default_factory=list)
+    grounded_pct: float = 0.0
+    hallucination_risk: float = 0.0
+
+
+class BriefSummary(BaseModel):
+    """List-view shape for /api/briefs/pending."""
+    id: int
+    reader: str
+    project: str
+    date_range_start: datetime
+    date_range_end: datetime
+    generated_at: datetime
+    grounded_pct: float
+    hallucination_risk: float
+    ungrounded_count: int
+    status: BriefStatus
+
+    class Config:
+        from_attributes = True
+
+
+class BriefDetail(BaseModel):
+    """Full brief for /api/briefs/{id}."""
+    id: int
+    reader: str
+    project: str
+    date_range_start: datetime
+    date_range_end: datetime
+    markdown: str
+    citations: dict[str, Any]
+    ungrounded_flags: list[dict[str, Any]]
+    grounded_pct: float
+    hallucination_risk: float
+    status: BriefStatus
+    edited_markdown: Optional[str] = None
+    reject_reason: Optional[str] = None
+    pluteus_slug: Optional[str] = None
+    pluteus_sync_error: Optional[str] = None
+    generated_at: datetime
+    reviewed_at: Optional[datetime] = None
+
+
+class BriefApprove(BaseModel):
+    edited_markdown: Optional[str] = None
+
+
+class BriefApproveResponse(BaseModel):
+    id: int
+    status: BriefStatus
+    pluteus_slug: Optional[str] = None
+    pluteus_sync_error: Optional[str] = None
+    edit_distance: int
+    sources_backpropped: int
+
+
+class BriefReject(BaseModel):
+    reason: str = Field(..., min_length=1, max_length=500)
+
+
+class SentenceDiff(BaseModel):
+    original: str
+    edited: str
+    sources_cited: list[str]
+    distance: int
+
+
+class BriefDiffResponse(BaseModel):
+    brief_id: int
+    sentence_diffs: list[SentenceDiff]
+    total_edit_distance: int
