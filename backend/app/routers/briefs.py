@@ -41,7 +41,7 @@ from sqlalchemy.orm import Session
 
 from app.auth import get_current_user
 from app.database import get_db
-from app.models import Brief, BriefEdit, BriefStatus, User
+from app.models import Brief, BriefBackpropEntry, BriefEdit, BriefStatus, User
 from app.schemas import (
     BriefApprove,
     BriefApproveResponse,
@@ -50,8 +50,29 @@ from app.schemas import (
     BriefDiffResponse,
     BriefReject,
     BriefSummary,
+    RetireRequest,
+    RetireResponse,
     SentenceDiff,
+    UnreliableSourceOut,
 )
+
+# wp-10: correction backpropagation. The aletheia module holds the
+# formula and Amphora-side SQL; projecthub wires it to approve_brief
+# and persists the per-node log for aggregation. Imported optionally
+# so a projecthub without aletheia installed still runs (hooks degrade).
+try:
+    from aletheia.backprop import (
+        BackpropConfig,
+        SentenceEdit as _AletheiaSentenceEdit,
+        backprop_edits,
+        list_unreliable_sources,
+        retire_node,
+    )
+    from aletheia.backprop import RetirementNotApproved as _RetirementNotApproved
+    _ALETHEIA_AVAILABLE = True
+except ImportError:  # pragma: no cover — projecthub without aletheia
+    _ALETHEIA_AVAILABLE = False
+    _RetirementNotApproved = Exception  # type: ignore[misc,assignment]
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/briefs", tags=["Briefs"])
@@ -66,6 +87,13 @@ _APPROVER_FOR_READER = {
 
 _PLUTEUS_URL = os.environ.get("ALETHEIA_PLUTEUS_URL", "http://localhost:8080").rstrip("/")
 _PLUTEUS_TOKEN = os.environ.get("ALETHEIA_PLUTEUS_TOKEN")
+
+# wp-10: path to Amphora's sqlite db. backprop_edits operates directly
+# on Amphora to decrement the corroboration confidence dimension.
+_AMPHORA_DB = os.environ.get(
+    "ALETHEIA_AMPHORA_DB",
+    os.path.expanduser("~/.amphora/amphora.db"),
+)
 
 # Sentence splitter mirrors the wp-8 post-splitter-fix behaviour:
 # terminal punctuation may be followed by ``\s*[^N]`` runs that belong
@@ -347,6 +375,81 @@ def list_sent(
     return [_to_summary(b) for b in briefs]
 
 
+# ============ wp-10: unreliable sources surfacing + retirement ============
+
+@router.get("/unreliable-sources", response_model=list[UnreliableSourceOut])
+def list_unreliable(
+    threshold: float = 0.30,
+    window_days: int = 30,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[UnreliableSourceOut]:
+    """Surface Amphora nodes whose cumulative backprop decrement in the
+    window exceeds ``threshold``. Helo reviews + approves retirement
+    (separate endpoint below); nothing is deleted here.
+
+    Degrades to an empty list when aletheia isn't installed — the log
+    rows may still exist but we can't contact Amphora to build previews.
+    """
+    if not _ALETHEIA_AVAILABLE or not os.path.exists(_AMPHORA_DB):
+        return []
+
+    entries = db.query(BriefBackpropEntry).all()
+    log = [
+        {
+            "node_id": e.node_id,
+            "delta": float(e.delta),
+            "edit_count": e.edit_count,
+            "applied_at": e.applied_at.isoformat() if e.applied_at else None,
+        }
+        for e in entries
+    ]
+    cfg = BackpropConfig(
+        unreliable_threshold=threshold,
+        unreliable_window_days=window_days,
+    )
+    unreliable = list_unreliable_sources(_AMPHORA_DB, log, config=cfg)
+    return [
+        UnreliableSourceOut(
+            node_id=u.node_id,
+            cumulative_decrement=u.cumulative_decrement,
+            edit_count=u.edit_count,
+            content_preview=u.content_preview,
+        )
+        for u in unreliable
+    ]
+
+
+@router.post("/unreliable-sources/{node_id}/retire", response_model=RetireResponse)
+def retire_unreliable_source(
+    node_id: str,
+    payload: RetireRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> RetireResponse:
+    """Delete an Amphora node after Helo's explicit approval.
+
+    Both the request body ``approved_by`` AND the caller's own username
+    must be 'helo' — the body check guards typos; the caller-identity
+    check guards against anyone-else-calling-this-with-approved_by=helo.
+    """
+    if not _ALETHEIA_AVAILABLE or not os.path.exists(_AMPHORA_DB):
+        raise HTTPException(
+            status_code=503,
+            detail="aletheia not installed or Amphora db missing — retire unavailable",
+        )
+    if current_user.username.lower() != "helo":
+        raise HTTPException(
+            status_code=403,
+            detail=f"Retirement requires user 'helo'; got {current_user.username!r}",
+        )
+    try:
+        result = retire_node(_AMPHORA_DB, node_id, approved_by=payload.approved_by)
+    except _RetirementNotApproved as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
+    return RetireResponse(**result)
+
+
 @router.get("/{brief_id}", response_model=BriefDetail)
 def get_brief(
     brief_id: int,
@@ -421,6 +524,50 @@ def approve_brief(
             sources_backpropped += len(d.sources_cited)
         brief.edited_markdown = payload.edited_markdown
 
+        # wp-10: correction backpropagation. Apply the edits to Amphora
+        # and log per-node decrements so the /unreliable-sources
+        # aggregation has persistent data to aggregate over.
+        if _ALETHEIA_AVAILABLE and os.path.exists(_AMPHORA_DB):
+            # Skip nodes we've already backpropped for this brief
+            # (idempotence guard if approve is called twice somehow).
+            prior = {
+                e.node_id
+                for e in db.query(BriefBackpropEntry).filter(
+                    BriefBackpropEntry.brief_id == brief.id
+                )
+            }
+            try:
+                citations = json.loads(brief.citations_json or "{}")
+                result = backprop_edits(
+                    _AMPHORA_DB,
+                    brief_id=brief.id,
+                    edits=[
+                        _AletheiaSentenceEdit(
+                            original=d.original,
+                            edited=d.edited,
+                            sources_cited=d.sources_cited,
+                            distance=d.distance,
+                        )
+                        for d in diffs
+                    ],
+                    citations=citations,
+                    already_applied_node_ids=prior,
+                )
+                for affected in result.sources_affected:
+                    db.add(BriefBackpropEntry(
+                        brief_id=brief.id,
+                        node_id=affected["node_id"],
+                        old_corroboration=f"{affected['old_corroboration']:.4f}",
+                        new_corroboration=f"{affected['new_corroboration']:.4f}",
+                        delta=f"{affected['delta']:.4f}",
+                        at_floor=affected["at_floor"],
+                        edit_count=affected["edit_count"],
+                    ))
+            except Exception as exc:  # noqa: BLE001 — degrade, do not fail approve
+                logger.warning(
+                    "wp-10 backprop failed for brief %d: %s", brief.id, exc,
+                )
+
     slug, sync_error = _write_to_pluteus(brief, final_markdown)
     brief.pluteus_slug = slug
     brief.pluteus_sync_error = sync_error
@@ -473,3 +620,5 @@ def reject_brief(
     db.commit()
     db.refresh(brief)
     return _to_detail(brief)
+
+
